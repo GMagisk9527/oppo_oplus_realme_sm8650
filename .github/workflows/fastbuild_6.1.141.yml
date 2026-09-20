@@ -95,6 +95,11 @@ on:
         required: true
         type: boolean
         default: 'true'
+      aosp_psi:
+        description: 'memcg超限睡眠不算全局PSI stall(AOSP)。冻结/调度误判时可关'
+        required: true
+        type: boolean
+        default: 'true'
       ccache_update:
         description: '更新ccache缓存(将本次编译生成的ccache缓存覆盖至仓库缓存，在更改编译配置、源码或需要刷新缓存时开启)'
         required: true
@@ -374,6 +379,16 @@ jobs:
             git clone --depth=1 https://github.com/$GITHUB_REPOSITORY.git -b $GITHUB_REF_NAME $GITHUB_ACTOR
           fi
           bash ./$GITHUB_ACTOR/android_lts_patch/apply.sh "$(pwd)/common"
+
+      - name: 应用 AOSP PSI memcg 限速不计全局 stall
+        if: inputs.aosp_psi
+        run: |
+          echo "正在应用 AOSP PSI 补丁..."
+          cd kernel_workspace
+          if [[ ! -d ./$GITHUB_ACTOR ]]; then
+            git clone --depth=1 https://github.com/$GITHUB_REPOSITORY.git -b $GITHUB_REF_NAME $GITHUB_ACTOR
+          fi
+          bash ./$GITHUB_ACTOR/aosp_psi_patch/apply.sh "$(pwd)/common"
           
       - name: 添加SUSFS 配置项
         if: inputs.susfs_enable
@@ -773,6 +788,7 @@ jobs:
           echo "AOSP power: ${{ github.event.inputs.aosp_power }}" >> ./ak3.log
           echo "QCOM LTS: ${{ github.event.inputs.qcom_lts }}" >> ./ak3.log
           echo "Android LTS: ${{ github.event.inputs.android_lts }}" >> ./ak3.log
+          echo "AOSP PSI: ${{ github.event.inputs.aosp_psi }}" >> ./ak3.log
           zip -z ../$AK3_NAME < ./ak3.log
 
       - name: 上传 Ccache 调试日志
@@ -858,7 +874,8 @@ jobs:
           - 内核级基带保护支持：${{ github.event.inputs.baseband_guard }}
           - AOSP功耗默认(RCU Lazy/TEO/WQ/MGLRU/schedstats)：${{ github.event.inputs.aosp_power }}
           - QCOM/UFS/idle LTS修复：${{ github.event.inputs.qcom_lts }}
-          - futex/binder/dma-buf LTS修复：${{ github.event.inputs.android_lts }}
+          - futex/binder/freezer/RCU/MGLRU LTS修复：${{ github.event.inputs.android_lts }}
+          - AOSP PSI(memcg超限不计全局stall)：${{ github.event.inputs.aosp_psi }}
           - ReSukiSU管理器下载：[ReSukiSU_CI](https://github.com/cctv18/ReSukiSU_CI/releases)
           - SukiSU Ultra管理器下载：[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases)
           - KernelSU Next管理器下载：[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next/releases)

@@ -39,6 +39,8 @@ read -p "是否合入 QCOM/UFS/idle LTS 修复？(y/n，默认：y): " APPLY_QCO
 APPLY_QCOM_LTS=${APPLY_QCOM_LTS:-y}
 read -p "是否合入 futex/binder/dma-buf LTS 修复？(y/n，默认：y): " APPLY_ANDROID_LTS
 APPLY_ANDROID_LTS=${APPLY_ANDROID_LTS:-y}
+read -p "是否合入 AOSP PSI(memcg超限睡眠不算全局stall)？(y/n，默认：y): " APPLY_AOSP_PSI
+APPLY_AOSP_PSI=${APPLY_AOSP_PSI:-y}
 
 if [[ "$KSU_BRANCH" == "y" || "$KSU_BRANCH" == "Y" ]]; then
   KSU_TYPE="SukiSU Ultra"
@@ -70,6 +72,7 @@ echo "启用内核级基带保护: $APPLY_BBG"
 echo "启用 AOSP 功耗默认: $APPLY_AOSP_POWER"
 echo "合入 QCOM/UFS/idle LTS: $APPLY_QCOM_LTS"
 echo "合入 futex/binder/dma-buf LTS: $APPLY_ANDROID_LTS"
+echo "合入 AOSP PSI memcg: $APPLY_AOSP_PSI"
 echo "===================="
 echo
 
@@ -214,6 +217,12 @@ fi
 if [[ "$APPLY_ANDROID_LTS" == [yY] ]]; then
   echo ">>> 应用 futex/binder/dma-buf LTS 修复..."
   bash "$SCRIPT_DIR/../android_lts_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
+  cd "$WORKDIR/kernel_workspace"
+fi
+
+if [[ "$APPLY_AOSP_PSI" == [yY] ]]; then
+  echo ">>> 应用 AOSP PSI memcg 限速不计全局 stall..."
+  bash "$SCRIPT_DIR/../aosp_psi_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
 
@@ -482,6 +491,9 @@ if [[ "$APPLY_QCOM_LTS" == [yY] ]]; then
 fi
 if [[ "$APPLY_ANDROID_LTS" == [yY] ]]; then
   ZIP_NAME="${ZIP_NAME}-andlts"
+fi
+if [[ "$APPLY_AOSP_PSI" == [yY] ]]; then
+  ZIP_NAME="${ZIP_NAME}-aospsi"
 fi
 
 ZIP_NAME="${ZIP_NAME}-v$(date +%Y%m%d).zip"

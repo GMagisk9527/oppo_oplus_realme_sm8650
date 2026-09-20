@@ -21,6 +21,7 @@
 - FUSE livelock / readahead
 - fair.c PELT
 - UFS hang / lrbp / init UAF（`ufshcd.c` 厂商改太多）
-- PSI / workqueue watchdog（上下文对不上；PSI 时钟那笔树里已经有了）
+- workqueue watchdog（上下文对不上；PSI 时钟那笔树里已经有了）
+- memcg 超限睡眠的全局 PSI 记账：单独在 `aosp_psi_patch`，默认开，开关 `aosp_psi`
 
 刷完重点：多开 App、锁屏、相机预览、播放器（futex/binder）；开了 Re-Kernel/冻结再看切后台。异常就把 Action 里 `android_lts` 关掉。

@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000021 Mon Sep 17 00:00:00 2001
+From: Suren Baghdasaryan <surenb@google.com>
+Date: Mon, 17 Aug 2026 20:51:00 +0000
+Subject: [PATCH] ANDROID: do not account memcg limiting as global PSI stall
+
+Adapted from AOSP android14-6.1-lts e7abc85f1ccc.
+
+When a memcg hits memory.high and reclaim cannot catch up, the
+allocator is throttled with schedule_timeout_killable(). That delay
+used to be recorded as PSI memstall, which inflates *global* PSI
+and can look like machine-wide reclaim pressure.
+
+Skip PSI around the throttle sleep. Real reclaim in reclaim_high()
+and try_charge still accounts stalls.
+
+The AOSP follow-up vendor hook is omitted: it would add a GKI
+tracepoint this OnePlus tree does not export.
+
+--- a/mm/memcontrol.c
++++ b/mm/memcontrol.c
+@@ -2656,7 +2656,6 @@
+ void mem_cgroup_handle_over_high(gfp_t gfp_mask)
+ {
+ 	unsigned long penalty_jiffies;
+-	unsigned long pflags;
+ 	unsigned long nr_reclaimed;
+ 	unsigned int nr_pages = current->memcg_nr_pages_over_high;
+ 	int nr_retries = MAX_RECLAIM_RETRIES;
+@@ -2723,10 +2722,12 @@
+ 	 * If we exit early, we're guaranteed to die (since
+ 	 * schedule_timeout_killable sets TASK_KILLABLE). This means we don't
+ 	 * need to account for any ill-begotten jiffies to pay them off later.
++	 *
++	 * Do not account this policy delay as a global PSI stall.
++	 * memcg high-limit throttling inflates system PSI and can be
++	 * mistaken for machine-wide reclaim pressure (AOSP e7abc85f1ccc).
+ 	 */
+-	psi_memstall_enter(&pflags);
+ 	schedule_timeout_killable(penalty_jiffies);
+-	psi_memstall_leave(&pflags);
+ 
+ out:
+ 	css_put(&memcg->css);
