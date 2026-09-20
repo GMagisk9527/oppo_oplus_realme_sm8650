@@ -35,6 +35,8 @@ read -p "是否启用内核级基带保护？(y/n，默认：y): " APPLY_BBG
 APPLY_BBG=${APPLY_BBG:-y}
 read -p "是否启用 AOSP 功耗默认(RCU Lazy/TEO/WQ/MGLRU/关schedstats)？(y/n，默认：y): " APPLY_AOSP_POWER
 APPLY_AOSP_POWER=${APPLY_AOSP_POWER:-y}
+read -p "是否合入 QCOM/UFS/idle LTS 修复？(y/n，默认：y): " APPLY_QCOM_LTS
+APPLY_QCOM_LTS=${APPLY_QCOM_LTS:-y}
 
 if [[ "$KSU_BRANCH" == "y" || "$KSU_BRANCH" == "Y" ]]; then
   KSU_TYPE="SukiSU Ultra"
@@ -64,6 +66,7 @@ echo "启用三星SSG IO调度器: $APPLY_SSG"
 echo "启用Re-Kernel: $APPLY_REKERNEL"
 echo "启用内核级基带保护: $APPLY_BBG"
 echo "启用 AOSP 功耗默认: $APPLY_AOSP_POWER"
+echo "合入 QCOM/UFS/idle LTS: $APPLY_QCOM_LTS"
 echo "===================="
 echo
 
@@ -196,6 +199,12 @@ if [[ "$APPLY_LZ4KD" == "y" || "$APPLY_LZ4KD" == "Y" ]]; then
   cd "$WORKDIR/kernel_workspace"
 else
   echo ">>> 跳过 LZ4KD 补丁..."
+  cd "$WORKDIR/kernel_workspace"
+fi
+
+if [[ "$APPLY_QCOM_LTS" == [yY] ]]; then
+  echo ">>> 应用 QCOM/UFS/idle LTS 修复..."
+  bash "$SCRIPT_DIR/../qcom_lts_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
 
@@ -458,6 +467,9 @@ if [[ "$APPLY_BBG" == \"y\" || "$APPLY_BBG" == \"Y\" ]]; then
 fi
 if [[ "$APPLY_AOSP_POWER" == [yY] ]]; then
   ZIP_NAME="${ZIP_NAME}-aosp"
+fi
+if [[ "$APPLY_QCOM_LTS" == [yY] ]]; then
+  ZIP_NAME="${ZIP_NAME}-qcomlts"
 fi
 
 ZIP_NAME="${ZIP_NAME}-v$(date +%Y%m%d).zip"
