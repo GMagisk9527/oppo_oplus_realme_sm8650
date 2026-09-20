@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000019 Mon Sep 17 00:00:00 2001
+From: Yu Zhao <yuzhao@google.com>
+Date: Thu, 25 Jun 2026 23:27:51 +0200
+Subject: [PATCH] mm/mglru: skip special VMAs in lru_gen_look_around()
+
+Hand-adapted from linux-stable 1971f04f12da. OnePlus vmscan.c
+has extra CHP / folio locals so the stable hunk does not apply.
+Skip VM_SPECIAL (VM_PFNMAP etc.) look-around; they can trip
+get_pte_pfn() and are not worth scanning.
+
+---
+ mm/vmscan.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -4899,6 +4899,10 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
+ 	if (spin_is_contended(pvmw->ptl))
+ 		return;
+ 
++	/* exclude special VMAs containing anon pages from COW */
++	if (pvmw->vma->vm_flags & VM_SPECIAL)
++		return;
++
+ 	/* avoid taking the LRU lock under the PTL when possible */
+ 	walk = current->reclaim_state ? current->reclaim_state->mm_walk : NULL;
+ 

@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000013 Mon Sep 17 00:00:00 2001
+From: Carlos Llamas <cmllamas@google.com>
+Date: Fri, 19 Jun 2026 18:52:30 +0000
+Subject: [PATCH] binder: pin to_thread when freeing transaction (UAF)
+
+Hand-adapted from linux-stable:
+
+  38e1a71728e5 binder: fix UAF in binder_thread_release()
+  48aeda9f8039 binder: fix UAF in binder_free_transaction()
+
+OnePlus tree has an extra vendor hook in binder_free_transaction(),
+so the stable patches do not apply. Read to_proc/to_thread under
+t->lock and pin the target thread so to_proc cannot be freed in
+parallel.
+
+---
+ drivers/android/binder.c | 23 ++++++++++++++++++++++-
+ 1 file changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/android/binder.c b/drivers/android/binder.c
+--- a/drivers/android/binder.c
++++ b/drivers/android/binder.c
+@@ -1858,7 +1858,20 @@ static void binder_txn_latency_free(struct binder_transaction *t)
+ 
+ static void binder_free_transaction(struct binder_transaction *t)
+ {
+-	struct binder_proc *target_proc = t->to_proc;
++	struct binder_thread *target_thread;
++	struct binder_proc *target_proc;
++
++	spin_lock(&t->lock);
++	target_proc = t->to_proc;
++	target_thread = t->to_thread;
++	/*
++	 * Pin target_thread to keep target_proc alive. Undelivered
++	 * transactions with !target_thread are safe, as target_proc
++	 * can only be the current context there.
++	 */
++	if (target_thread)
++		atomic_inc(&target_thread->tmp_ref);
++	spin_unlock(&t->lock);
+ 
+ 	trace_android_vh_free_oem_binder_struct(t);
+ 	if (target_proc) {
+@@ -1873,6 +1886,10 @@ static void binder_free_transaction(struct binder_transaction *t)
+ 			t->buffer->transaction = NULL;
+ 		binder_inner_proc_unlock(target_proc);
+ 	}
++
++	if (target_thread)
++		binder_thread_dec_tmpref(target_thread);
++
+ 	if (trace_binder_txn_latency_free_enabled())
+ 		binder_txn_latency_free(t);
+ 	/*
