@@ -33,6 +33,8 @@ read -p "是否启用Re-Kernel？(y/n，默认：n): " APPLY_REKERNEL
 APPLY_REKERNEL=${APPLY_REKERNEL:-n}
 read -p "是否启用内核级基带保护？(y/n，默认：y): " APPLY_BBG
 APPLY_BBG=${APPLY_BBG:-y}
+read -p "是否启用 AOSP 功耗默认(RCU Lazy/TEO/WQ/MGLRU/关schedstats)？(y/n，默认：y): " APPLY_AOSP_POWER
+APPLY_AOSP_POWER=${APPLY_AOSP_POWER:-y}
 
 if [[ "$KSU_BRANCH" == "y" || "$KSU_BRANCH" == "Y" ]]; then
   KSU_TYPE="SukiSU Ultra"
@@ -61,6 +63,7 @@ echo "应用 Droidspaces 容器支持: $APPLY_DROIDSPACES"
 echo "启用三星SSG IO调度器: $APPLY_SSG"
 echo "启用Re-Kernel: $APPLY_REKERNEL"
 echo "启用内核级基带保护: $APPLY_BBG"
+echo "启用 AOSP 功耗默认: $APPLY_AOSP_POWER"
 echo "===================="
 echo
 
@@ -230,6 +233,11 @@ echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$DEFCONFIG_FILE"
 #跳过将uapi标准头安装到 usr/include 目录的不必要操作，节省编译时间
 echo "CONFIG_HEADERS_INSTALL=n" >> "$DEFCONFIG_FILE"
 
+if [[ "$APPLY_AOSP_POWER" == [yY] ]]; then
+  echo ">>> 应用 AOSP 功耗 defconfig..."
+  bash "$SCRIPT_DIR/../aosp_power/apply_defconfig.sh" "$DEFCONFIG_FILE"
+fi
+
 # 应用 CVE_2026_43499 修复补丁
 cd common
 wget https://github.com/cctv18/oppo_oplus_realme_sm8650/raw/refs/heads/main/other_patch/cve-2026-43499-rtmutex-6.1.patch
@@ -398,6 +406,11 @@ git clone https://github.com/cctv18/AnyKernel3 --depth=1
 echo ">>> 清理 AnyKernel3 Git 信息..."
 rm -rf ./AnyKernel3/.git
 
+if [[ "$APPLY_AOSP_POWER" == [yY] ]]; then
+  echo ">>> 注入 AOSP 功耗 cmdline / 模块..."
+  bash "$SCRIPT_DIR/../aosp_power/inject_anykernel.sh" "$WORKDIR/kernel_workspace/AnyKernel3"
+fi
+
 echo ">>> 拷贝内核镜像到 AnyKernel3 目录..."
 cp "$OUT_DIR/Image" ./AnyKernel3/
 
@@ -440,8 +453,11 @@ fi
 if [[ "$APPLY_REKERNEL" == "y" || "$APPLY_REKERNEL" == "Y" ]]; then
   ZIP_NAME="${ZIP_NAME}-rek"
 fi
-if [[ "$APPLY_BBG" == "y" || "$APPLY_BBG" == "Y" ]]; then
+if [[ "$APPLY_BBG" == \"y\" || "$APPLY_BBG" == \"Y\" ]]; then
   ZIP_NAME="${ZIP_NAME}-bbg"
+fi
+if [[ "$APPLY_AOSP_POWER" == [yY] ]]; then
+  ZIP_NAME="${ZIP_NAME}-aosp"
 fi
 
 ZIP_NAME="${ZIP_NAME}-v$(date +%Y%m%d).zip"

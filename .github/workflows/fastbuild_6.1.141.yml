@@ -80,6 +80,11 @@ on:
         required: true
         type: boolean
         default: 'true'
+      aosp_power:
+        description: 'AOSP功耗默认(RCU Lazy、关schedstats、省电workqueue、钉住MGLRU、TEO idle)。出问题可关'
+        required: true
+        type: boolean
+        default: 'true'
       ccache_update:
         description: '更新ccache缓存(将本次编译生成的ccache缓存覆盖至仓库缓存，在更改编译配置、源码或需要刷新缓存时开启)'
         required: true
@@ -379,6 +384,15 @@ jobs:
           fi
           # 开启O2编译优化配置
           echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> ./common/arch/arm64/configs/gki_defconfig
+          if [[ "${{ github.event.inputs.aosp_power }}" != "false" ]]; then
+            echo "正在应用 AOSP 功耗 defconfig..."
+            git clone --depth=1 https://github.com/$GITHUB_REPOSITORY.git -b $GITHUB_REF_NAME aosp_power_src || true
+            if [[ -f ./aosp_power_src/aosp_power/apply_defconfig.sh ]]; then
+              bash ./aosp_power_src/aosp_power/apply_defconfig.sh ./common/arch/arm64/configs/gki_defconfig
+            else
+              echo "未找到 aosp_power/apply_defconfig.sh，跳过 defconfig 修改"
+            fi
+          fi
           #禁用 defconfig 检查
           sed -i 's/check_defconfig//' ./common/build.config.gki
           #跳过将uapi标准头安装到 usr/include 目录的不必要操作，节省编译时间
@@ -662,6 +676,13 @@ jobs:
           cd kernel_workspace
           git clone https://github.com/cctv18/AnyKernel3 --depth=1
           rm -rf ./AnyKernel3/.git
+          if [[ "${{ github.event.inputs.aosp_power }}" != "false" ]]; then
+            echo "正在注入 AOSP 功耗 cmdline / 模块..."
+            if [[ ! -d ./aosp_power_src ]]; then
+              git clone --depth=1 https://github.com/$GITHUB_REPOSITORY.git -b $GITHUB_REF_NAME aosp_power_src
+            fi
+            bash ./aosp_power_src/aosp_power/inject_anykernel.sh "$(pwd)/AnyKernel3"
+          fi
           cd AnyKernel3
           cp ../common/out/arch/arm64/boot/Image ./Image
           if [[ ! -f ./Image ]]; then
@@ -719,6 +740,7 @@ jobs:
           echo "SSG: ${{ github.event.inputs.ssg_enable }}" >> ./ak3.log
           echo "Re-Kernel: ${{ github.event.inputs.rekernel_enable }}" >> ./ak3.log
           echo "BBG: ${{ github.event.inputs.baseband_guard }}" >> ./ak3.log
+          echo "AOSP power: ${{ github.event.inputs.aosp_power }}" >> ./ak3.log
           zip -z ../$AK3_NAME < ./ak3.log
 
       - name: 上传 Ccache 调试日志
@@ -802,6 +824,7 @@ jobs:
           - 三星SSG IO调度器支持：${{ github.event.inputs.ssg_enable }}
           - Re-Kernel支持：${{ github.event.inputs.rekernel_enable }}
           - 内核级基带保护支持：${{ github.event.inputs.baseband_guard }}
+          - AOSP功耗默认(RCU Lazy/TEO/WQ/MGLRU/schedstats)：${{ github.event.inputs.aosp_power }}
           - ReSukiSU管理器下载：[ReSukiSU_CI](https://github.com/cctv18/ReSukiSU_CI/releases)
           - SukiSU Ultra管理器下载：[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases)
           - KernelSU Next管理器下载：[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next/releases)

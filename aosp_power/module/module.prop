@@ -1,0 +1,6 @@
+id=aosp_power
+name=AOSP power defaults
+version=1.0
+versionCode=10
+author=GMagisk9527
+description=Keep AOSP-style power defaults: schedstats off, MGLRU on, TEO idle governor
