@@ -1,0 +1,32 @@
+From 0d40b26377f8 Mon Sep 17 00:00:00 2001
+From: Chao Yu <chao@kernel.org>
+Date: Thu, 21 May 2026 00:00:00 +0800
+Subject: [PATCH] f2fs: fix UAF caused by decrementing sbi->nr_pages[] in
+ f2fs_write_end_io()
+
+[ Adapted for OnePlus 6.1.141 OKI: vendor already moved cp_wait wakeup
+  out of the bio loop; keep that, only reorder del_fsync before
+  dec_page_count so the page is not used after nr_pages hits zero. ]
+
+dec_page_count() can let waiters proceed while the page is still on the
+warm node list. Drop the fsync node entry first.
+
+Signed-off-by: Chao Yu <chao@kernel.org>
+---
+ fs/f2fs/data.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/fs/f2fs/data.c b/fs/f2fs/data.c
+--- a/fs/f2fs/data.c
++++ b/fs/f2fs/data.c
+@@ -462,9 +462,9 @@ static void f2fs_write_end_io(struct bio *bio)
+ 		f2fs_bug_on(sbi, page->mapping == NODE_MAPPING(sbi) &&
+ 					page->index != nid_of_node(page));
+ 
+-		dec_page_count(sbi, type);
+ 		if (f2fs_in_warm_node_list(sbi, page))
+ 			f2fs_del_fsync_node_entry(sbi, page);
++		dec_page_count(sbi, type);
+ 		clear_page_private_gcing(page);
+ 		end_page_writeback(page);
+ 	}
