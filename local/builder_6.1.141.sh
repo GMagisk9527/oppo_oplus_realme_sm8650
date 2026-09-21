@@ -43,7 +43,7 @@ read -p "是否合入 AOSP PSI(memcg超限睡眠不算全局stall)？(y/n，默�
 APPLY_AOSP_PSI=${APPLY_AOSP_PSI:-y}
 read -p "是否合入 f2fs 原子写/write_end_io LTS 修复？(y/n，默认：y): " APPLY_F2FS_LTS
 APPLY_F2FS_LTS=${APPLY_F2FS_LTS:-y}
-read -p "是否合入 AOSP ACK 非LTS backport(wifi/xhci/NFC/蓝牙/PSI/PM)？(y/n，默认：y): " APPLY_ACK_BACKPORT
+read -p "是否合入 AOSP ACK 非LTS backport(wifi/NFC/蓝牙/PSI，不含xhci/PM)？(y/n，默认：y): " APPLY_ACK_BACKPORT
 APPLY_ACK_BACKPORT=${APPLY_ACK_BACKPORT:-y}
 read -p "是否合入主线6.6-6.18独立修复(UFS/PHY/f2fs/gadget)？(y/n，默认：y): " APPLY_MAINLINE_BP
 APPLY_MAINLINE_BP=${APPLY_MAINLINE_BP:-y}

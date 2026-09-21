@@ -106,7 +106,7 @@ on:
         type: boolean
         default: 'true'
       ack_backport:
-        description: '合入AOSP ACK android14-6.1(非LTS)的新backport(wifi/xhci/NFC/蓝牙/PSI/PM suspend)。出问题可关'
+        description: '合入AOSP ACK android14-6.1(非LTS) backport(wifi/NFC/蓝牙/PSI)。xhci/PM已从默认包拿掉(开机回归)。出问题可关'
         required: true
         type: boolean
         default: 'true'
@@ -415,7 +415,7 @@ jobs:
           fi
           bash ./$GITHUB_ACTOR/f2fs_lts_patch/apply.sh "$(pwd)/common"
 
-      - name: 应用 ACK 非LTS backport (wifi/xhci/NFC/蓝牙/PSI/PM)
+      - name: 应用 ACK 非LTS backport (wifi/NFC/蓝牙/PSI)
         if: inputs.ack_backport
         run: |
           echo "正在应用 ACK backport 补丁..."
