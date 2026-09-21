@@ -1,0 +1,32 @@
+From 36592d4a60da Mon Sep 17 00:00:00 2001
+From: Chunhai Guo
+Date: Mon Mar 17 04:16:24 2025 -0600
+Subject: [PATCH] f2fs: fix missing discard for active segments
+
+UPSTREAM: f2fs: fix missing discard for active segments
+
+add_discard_addrs() skipped any segment with 0 valid blocks, including
+the current segment being trimmed at checkpoint. No discard_cmd was
+created for it, yet its ckpt/cur valid maps were synced, so the missing
+discard bits were never recovered and discard_blks stayed non-zero.
+
+Only skip a 0-valid-block segment when it is not the segment currently
+being trimmed.
+
+Source: AOSP android14-6.1-lts 36592d4a60da
+---
+diff --git a/fs/f2fs/segment.c b/fs/f2fs/segment.c
+index bd0fbc8..e5cf500 100644
+--- a/fs/f2fs/segment.c
++++ b/fs/f2fs/segment.c
+@@ -1982,7 +1982,9 @@ static bool add_discard_addrs(struct f2fs_sb_info *sbi, struct cp_control *cpc,
+ 		return false;
+ 
+ 	if (!force) {
+-		if (!f2fs_realtime_discard_enable(sbi) || !se->valid_blocks ||
++		if (!f2fs_realtime_discard_enable(sbi) ||
++			(!se->valid_blocks &&
++				!IS_CURSEG(sbi, cpc->trim_start)) ||
+ 			SM_I(sbi)->dcc_info->nr_discards >=
+ 				SM_I(sbi)->dcc_info->max_discards)
+ 			return false;

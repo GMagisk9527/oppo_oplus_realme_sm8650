@@ -1,0 +1,44 @@
+From f0170130c9a7 Mon Sep 17 00:00:00 2001
+From: yong.wang
+Date: Mon Nov 03 16:19:02 2025 +0800
+Subject: [PATCH] ANDROID: Fix shrink_many UAF of memcg
+
+ANDROID: Fix shrink_many UAF of memcg
+
+shrink_many() released memcg before should_abort_scan() dereferenced
+lruvec. When that was the last reference the memcg (and its lruvec) was
+freed, giving a KASAN use-after-free in should_abort_scan() from kswapd.
+
+Reset lruvec at the restart label and put memcg only after the abort
+check is done.
+
+Source: AOSP android14-6.1-lts f0170130c9a7
+---
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index 30c8013e..486b324 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -5507,6 +5507,7 @@ static void shrink_many(struct pglist_data *pgdat, struct scan_control *sc)
+ 	bin = first_bin = get_random_u32_below(MEMCG_NR_BINS);
+ restart:
+ 	op = 0;
++	lruvec = NULL;
+ 	memcg = NULL;
+ 	gen = get_memcg_gen(READ_ONCE(pgdat->memcg_lru.seq));
+ 
+@@ -5548,10 +5549,12 @@ static void shrink_many(struct pglist_data *pgdat, struct scan_control *sc)
+ 	if (op)
+ 		lru_gen_rotate_memcg(lruvec, op);
+ 
+-	mem_cgroup_put(memcg);
+-
+-	if (lruvec && should_abort_scan(lruvec, sc))
++	if (lruvec && should_abort_scan(lruvec, sc)) {
++		mem_cgroup_put(memcg);
+ 		return;
++	}
++
++	mem_cgroup_put(memcg);
+ 
+ 	/* restart if raced with lru_gen_rotate_memcg() */
+ 	if (gen != get_nulls_value(pos))
