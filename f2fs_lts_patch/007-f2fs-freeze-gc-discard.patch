@@ -1,0 +1,73 @@
+From 02d91398a602c394d72cd61a67c84e2730c5f79b Mon Sep 17 00:00:00 2001
+From: Daeho Jeong <daehojeong@google.com>
+Date: Mon, 16 Mar 2026 11:59:54 -0700
+Subject: [PATCH] f2fs: fix to freeze GC and discard threads quickly
+
+[ Backport of 02d91398a602 from 7.1 ]
+
+Suspend can fail if kernel threads do not freeze for a while.
+Add freezing() checks at the f2fs_gc retry point and in discard
+issue loops so the threads can drop locks and freeze.
+
+[ Adapted for OnePlus 6.1.141 OKI: skip do_garbage_collect inner
+  check (6.1 holds extra SSA page refs; breaking early would leak). ]
+
+Signed-off-by: Daeho Jeong <daehojeong@google.com>
+---
+diff --git a/fs/f2fs/gc.c b/fs/f2fs/gc.c
+--- a/fs/f2fs/gc.c
++++ b/fs/f2fs/gc.c
+@@ -1863,6 +1863,10 @@ int f2fs_gc(struct f2fs_sb_info *sbi, struct f2fs_gc_control *gc_control)
+ 		goto stop;
+ 	}
+ retry:
++	if (unlikely(freezing(current))) {
++		ret = 0;
++		goto stop;
++	}
+ 	ret = __get_victim(sbi, &segno, gc_type);
+ 	if (ret) {
+ 		/* allow to search victim from sections has pinned data */
+diff --git a/fs/f2fs/segment.c b/fs/f2fs/segment.c
+--- a/fs/f2fs/segment.c
++++ b/fs/f2fs/segment.c
+@@ -1551,6 +1551,9 @@ static void __issue_discard_cmd_orderly(struct f2fs_sb_info *sbi,
+ 		if (dc->state != D_PREP)
+ 			goto next;
+ 
++		if (*issued > 0 && unlikely(freezing(current)))
++			break;
++
+ 		if (dpolicy->io_aware && !is_idle(sbi, DISCARD_TIME)) {
+ 			io_interrupted = true;
+ 			break;
+@@ -1590,6 +1593,7 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
+ 	struct blk_plug plug;
+ 	int i, issued;
+ 	bool io_interrupted = false;
++	bool suspended = false;
+ 
+ 	if (dpolicy->timeout)
+ 		f2fs_update_time(sbi, UMOUNT_DISCARD_TIMEOUT);
+@@ -1620,6 +1624,11 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
+ 		list_for_each_entry_safe(dc, tmp, pend_list, list) {
+ 			f2fs_bug_on(sbi, dc->state != D_PREP);
+ 
++			if (issued > 0 && unlikely(freezing(current))) {
++				suspended = true;
++				break;
++			}
++
+ 			if (dpolicy->timeout &&
+ 				f2fs_time_over(sbi, UMOUNT_DISCARD_TIMEOUT))
+ 				break;
+@@ -1639,7 +1648,8 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
+ next:
+ 		mutex_unlock(&dcc->cmd_lock);
+ 
+-		if (issued >= dpolicy->max_requests || io_interrupted)
++		if (issued >= dpolicy->max_requests || io_interrupted ||
++				suspended)
+ 			break;
+ 	}
+ 

@@ -1,0 +1,70 @@
+From 76417038c4d61fc3d407625c0b9332942f13e142 Mon Sep 17 00:00:00 2001
+From: Palash Kambar <palash.kambar@oss.qualcomm.com>
+Date: Thu, 23 Apr 2026 15:50:23 +0530
+Subject: [PATCH] scsi: ufs: ufs-qcom: Enable Auto Hibern8 clock request
+ support
+
+[ Backport of 76417038c4d6 from 7.2 ]
+
+On platforms that support Auto Hibern8, the UFS controller can
+de-assert clk_req to GCC when entering Hibern8, allowing unused
+clocks to gate. Enable UFS_HW_CLK_CTRL_EN in UFS_AH8_CFG after
+link startup.
+
+[ Adapted for OnePlus 6.1.141 OKI: add POST_CHANGE on
+  link_startup_notify. UFS_AH8_CFG already exists. ]
+
+Signed-off-by: Palash Kambar <palash.kambar@oss.qualcomm.com>
+---
+diff --git a/drivers/ufs/host/ufs-qcom.c b/drivers/ufs/host/ufs-qcom.c
+--- a/drivers/ufs/host/ufs-qcom.c
++++ b/drivers/ufs/host/ufs-qcom.c
+@@ -527,6 +527,13 @@ static int ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
+ 	return 0;
+ }
+ 
++static void ufs_qcom_link_startup_post_change(struct ufs_hba *hba)
++{
++	if (ufshcd_is_auto_hibern8_supported(hba))
++		ufshcd_rmwl(hba, UFS_HW_CLK_CTRL_EN, UFS_HW_CLK_CTRL_EN,
++			    UFS_AH8_CFG);
++}
++
+ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
+ 					enum ufs_notify_change_status status)
+ {
+@@ -560,6 +567,13 @@ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
+ 		if (ufshcd_get_local_unipro_ver(hba) != UFS_UNIPRO_VER_1_41)
+ 			err = ufshcd_disable_host_tx_lcc(hba);
+ 
++		break;
++	case POST_CHANGE:
++		/*
++		 * Let the controller de-assert clk_req in Auto-Hibern8 so
++		 * GCC can gate unused clocks.
++		 */
++		ufs_qcom_link_startup_post_change(hba);
+ 		break;
+ 	default:
+ 		break;
+diff --git a/drivers/ufs/host/ufs-qcom.h b/drivers/ufs/host/ufs-qcom.h
+--- a/drivers/ufs/host/ufs-qcom.h
++++ b/drivers/ufs/host/ufs-qcom.h
+@@ -84,6 +84,17 @@ enum {
+ /* bit definitions for REG_UFS_CFG0 register */
+ #define QUNIPRO_G4_SEL		BIT(5)
+ 
++/* bit definitions for UFS_AH8_CFG register */
++#define CC_UFS_SYS_CLK_REQ_EN		BIT(2)
++#define CC_UFS_ICE_CORE_CLK_REQ_EN	BIT(3)
++#define CC_UFS_UNIPRO_CORE_CLK_REQ_EN	BIT(4)
++#define CC_UFS_AUXCLK_REQ_EN		BIT(5)
++
++#define UFS_HW_CLK_CTRL_EN	(CC_UFS_SYS_CLK_REQ_EN |\
++				CC_UFS_ICE_CORE_CLK_REQ_EN |\
++				CC_UFS_UNIPRO_CORE_CLK_REQ_EN |\
++				CC_UFS_AUXCLK_REQ_EN)
++
+ /* bit definitions for REG_UFS_CFG1 register */
+ #define QUNIPRO_SEL		BIT(0)
+ #define UFS_PHY_SOFT_RESET	BIT(1)

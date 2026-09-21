@@ -1,0 +1,47 @@
+From d14514c66cb9721b54318850796c005c446d76d6 Mon Sep 17 00:00:00 2001
+From: Suren Baghdasaryan <surenb@google.com>
+Date: Sun, 22 Mar 2026 00:08:43 -0700
+Subject: [PATCH] mm/vmscan: prevent MGLRU reclaim from pinning address space
+
+[ Backport of d14514c66cb9 from 7.1 ]
+
+When shrinking lruvec, MGLRU pins the address space (mmget) before
+walking it. That delays releasing a dying process: process_mrelease()
+and the oom-reaper see an elevated mm->mm_users and skip the mm.
+On Android this shows up as killed apps holding memory for seconds
+while kswapd is scanning them.
+
+Only the mm_struct needs to stay alive for mmap_read_lock + mm_mt
+walk. Replace mmget_not_zero/mmput_async with mmgrab/mmdrop.
+
+[ Adapted for OnePlus 6.1.141 OKI: helper is still should_skip_mm()
+  rather than get_next_mm(). ]
+
+Fixes: bd74fdaea146 ("mm: multi-gen LRU: support page table walks")
+Signed-off-by: Suren Baghdasaryan <surenb@google.com>
+---
+ mm/vmscan.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -3799,7 +3799,8 @@ static bool should_skip_mm(struct mm_struct *mm, struct lru_gen_mm_walk *walk)
+ 	if (size < MIN_LRU_BATCH)
+ 		return true;
+ 
+-	return !mmget_not_zero(mm);
++	mmgrab(mm);
++	return false;
+ }
+ 
+ static bool iterate_mm_list(struct lruvec *lruvec, struct lru_gen_mm_walk *walk,
+@@ -3863,7 +3864,7 @@ static bool iterate_mm_list(struct lruvec *lruvec, struct lru_gen_mm_walk *walk,
+ 		reset_bloom_filter(lruvec, walk->max_seq + 1);
+ 
+ 	if (*iter)
+-		mmput_async(*iter);
++		mmdrop(*iter);
+ 
+ 	*iter = mm;
+ 

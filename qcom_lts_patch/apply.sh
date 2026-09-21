@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apply linux-stable QCOM/UFS/idle fixes onto the OnePlus 6.1.141 OKI tree.
+# Apply linux-stable QCOM/UFS/idle fixes plus 6.16/7.2 AH8/QUnipro CGC onto the OnePlus 6.1.141 OKI tree.
 # Works on a git checkout or an unpacked zip (GitHub Actions).
 set -euo pipefail
 

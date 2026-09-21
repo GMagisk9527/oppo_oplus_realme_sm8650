@@ -86,7 +86,7 @@ on:
         type: boolean
         default: 'true'
       qcom_lts:
-        description: '合入UFS hibern8/EH、rpmh假唤醒、AOSS散热投票(日用)。出问题可关'
+        description: '合入UFS hibern8/EH、AH8 clk_req、QUnipro CGC、rpmh假唤醒、AOSS(日用)。出问题可关'
         required: true
         type: boolean
         default: 'true'
@@ -101,7 +101,7 @@ on:
         type: boolean
         default: 'true'
       f2fs_lts:
-        description: '合入f2fs checkpoint discard记账(discard_blks不归零)。出问题可关'
+        description: '合入f2fs discard记账、GC/discard冻结、shrink少扫。出问题可关'
         required: true
         type: boolean
         default: 'true'
@@ -111,7 +111,7 @@ on:
         type: boolean
         default: 'true'
       mainline_bp:
-        description: '合入UFS doorbell空转、f2fs压缩EIO死循环。出问题可关'
+        description: '合入UFS doorbell空转、f2fs压缩/fsync死循环、PSI irqtime、MGLRU mmgrab。出问题可关'
         required: true
         type: boolean
         default: 'true'
@@ -921,12 +921,12 @@ jobs:
           - Re-Kernel支持：${{ github.event.inputs.rekernel_enable }}
           - 内核级基带保护支持：${{ github.event.inputs.baseband_guard }}
           - AOSP功耗默认(RCU Lazy/TEO/WQ/MGLRU/schedstats)：${{ github.event.inputs.aosp_power }}
-          - QCOM UFS/rpmh/AOSS 日用修复：${{ github.event.inputs.qcom_lts }}
+          - QCOM UFS/AH8/QUnipro/rpmh/AOSS 日用修复：${{ github.event.inputs.qcom_lts }}
           - futex/dma-buf/freezer/MGLRU 日用修复：${{ github.event.inputs.android_lts }}
           - AOSP PSI(memcg超限不计全局stall)：${{ github.event.inputs.aosp_psi }}
-          - f2fs discard 记账：${{ github.event.inputs.f2fs_lts }}
+          - f2fs discard/冻结/shrink：${{ github.event.inputs.f2fs_lts }}
           - ACK 关wifi停NAN/P2P：${{ github.event.inputs.ack_backport }}
-          - 主线UFS busy-loop/f2fs压缩死循环：${{ github.event.inputs.mainline_bp }}
+          - 主线UFS busy-loop/f2fs死循环/PSI/MGLRU：${{ github.event.inputs.mainline_bp }}
           - ReSukiSU管理器下载：[ReSukiSU_CI](https://github.com/cctv18/ReSukiSU_CI/releases)
           - SukiSU Ultra管理器下载：[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases)
           - KernelSU Next管理器下载：[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next/releases)

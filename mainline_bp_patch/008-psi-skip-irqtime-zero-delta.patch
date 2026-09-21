@@ -1,0 +1,39 @@
+From b0bc1c75f304099347cfc0cc880b556966b54138 Mon Sep 17 00:00:00 2001
+From: Usama Arif <usama.arif@linux.dev>
+Date: Wed, 17 Jun 2026 10:50:06 -0700
+Subject: [PATCH] sched/psi: skip irqtime accounting when no new irq time has
+ elapsed
+
+[ Backport of b0bc1c75f304 from 7.2 ]
+
+psi_account_irqtime() bails out only when the irq-time delta is
+negative. A delta of exactly zero still takes the seqcount write,
+reads cpu_clock(), and walks the cgroup ancestor chain just to add 0
+to every group's PSI_IRQ_FULL bucket.
+
+The zero-delta case is common: it fires on every context switch that
+crosses a PSI group on a CPU that has not serviced an interrupt
+between the two switches. This tree has CONFIG_IRQ_TIME_ACCOUNTING=y
+and CONFIG_PSI=y.
+
+[ Adapted for OnePlus 6.1.141 OKI: irq time is still a per-cpu u64,
+  not rq->psi_irq_time. Same delta <= 0 early return. ]
+
+Signed-off-by: Usama Arif <usama.arif@linux.dev>
+---
+ kernel/sched/psi.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/sched/psi.c b/kernel/sched/psi.c
+--- a/kernel/sched/psi.c
++++ b/kernel/sched/psi.c
+@@ -979,7 +979,7 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
+ 
+ 	irq = irq_time_read(cpu);
+ 	psi_time =  &per_cpu(psi_irq_time, cpu);
+ 	delta = (s64)(irq - *psi_time);
+-	if (delta < 0)
++	if (delta <= 0)
+ 		return;
+ 	*psi_time = irq;
+ 

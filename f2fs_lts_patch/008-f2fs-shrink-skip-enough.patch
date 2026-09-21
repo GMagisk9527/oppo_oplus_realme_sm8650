@@ -1,0 +1,28 @@
+From 7173538c41d6046f1a92d1f92bc6d0c7b7e314a2 Mon Sep 17 00:00:00 2001
+From: Chao Yu <chao@kernel.org>
+Date: Wed, 5 Aug 2026 12:20:50 +0000
+Subject: [PATCH] f2fs: avoid unnecessary shrink in f2fs_shrink_scan()
+
+[ Backport of 7173538c41d6 from 7.2 ]
+
+In f2fs_shrink_scan(), skip shrinking the read extent tree if we have
+already reclaimed enough entries from the age extent tree.
+
+Signed-off-by: Chao Yu <chao@kernel.org>
+---
+ fs/f2fs/shrinker.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/fs/f2fs/shrinker.c b/fs/f2fs/shrinker.c
+--- a/fs/f2fs/shrinker.c
++++ b/fs/f2fs/shrinker.c
+@@ -109,7 +109,8 @@ unsigned long f2fs_shrink_scan(struct shrinker *shrink,
+ 		freed += f2fs_shrink_age_extent_tree(sbi, nr >> 2);
+ 
+ 		/* shrink read extent cache entries */
+-		freed += f2fs_shrink_read_extent_tree(sbi, nr >> 2);
++		if (freed < nr)
++			freed += f2fs_shrink_read_extent_tree(sbi, nr >> 2);
+ 
+ 		/* shrink clean nat cache entries */
+ 		if (freed < nr)

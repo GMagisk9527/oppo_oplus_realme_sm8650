@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apply independent mainline 6.6–6.18 backports onto the OnePlus 6.1.141 OKI tree.
+# Apply independent mainline 6.6–7.2 backports onto the OnePlus 6.1.141 OKI tree.
 set -euo pipefail
 
 TREE="${1:?kernel tree (common/)}"

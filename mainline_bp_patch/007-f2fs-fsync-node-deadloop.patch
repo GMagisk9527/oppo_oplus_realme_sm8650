@@ -1,0 +1,48 @@
+From ce366bfa821ec81dd45bde547ee31e659306cc61 Mon Sep 17 00:00:00 2001
+From: Chao Yu <chao@kernel.org>
+Date: Mon, 24 Aug 2026 21:17:29 +0800
+Subject: [PATCH] f2fs: fix to avoid potential deadloop in
+ f2fs_fsync_node_pages()
+
+[ Backport of ce366bfa821e from 7.3-rc ]
+
+There is potential deadloop in race condition:
+
+Thread A				Thread B
+- fsync
+ - f2fs_do_sync_file
+  - f2fs_fsync_node_pages
+   - last_fsync_dnode
+    - get last_page
+					- f2fs_setattr / truncate
+					 - invalidate_mapping_pages
+					  - page->mapping = NULL
+   - last_page is no longer a node page
+   - atomic && !marked is always true,
+     then goto retry
+
+[ Adapted for OnePlus 6.1.141 OKI: still uses struct page, not folio.
+  Check last_page->mapping against NODE_MAPPING after lock_page. ]
+
+Cc: stable@kernel.org
+Fixes: 608514deba38 ("f2fs: set fsync mark only for the last dnode")
+Signed-off-by: Chao Yu <chao@kernel.org>
+---
+ fs/f2fs/node.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/fs/f2fs/node.c b/fs/f2fs/node.c
+--- a/fs/f2fs/node.c
++++ b/fs/f2fs/node.c
+@@ -1888,6 +1888,11 @@ int f2fs_fsync_node_pages(struct f2fs_sb_info *sbi, struct inode *inode,
+ 		f2fs_debug(sbi, "Retry to write fsync mark: ino=%u, idx=%lx",
+ 			   ino, last_page->index);
+ 		lock_page(last_page);
++		if (unlikely(last_page->mapping != NODE_MAPPING(sbi))) {
++			f2fs_put_page(last_page, 1);
++			ret = -EAGAIN;
++			goto out;
++		}
+ 		f2fs_wait_on_page_writeback(last_page, NODE, true, true);
+ 		set_page_dirty(last_page);
+ 		unlock_page(last_page);
