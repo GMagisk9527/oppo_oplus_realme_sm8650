@@ -86,7 +86,7 @@ on:
         type: boolean
         default: 'true'
       qcom_lts:
-        description: '合入UFS hibern8/EH、AH8 clk_req、QUnipro CGC、rpmh假唤醒、AOSS(日用)。出问题可关'
+        description: '合入UFS hibern8/EH、AH8 clk_req、QUnipro CGC、rpmh假唤醒、AOSS、关testbus(日用)。出问题可关'
         required: true
         type: boolean
         default: 'true'
@@ -112,6 +112,11 @@ on:
         default: 'true'
       mainline_bp:
         description: '合入UFS doorbell空转、f2fs压缩/fsync死循环、PSI irqtime、MGLRU mmgrab。出问题可关'
+        required: true
+        type: boolean
+        default: 'true'
+      oplus_src:
+        description: '欧加锁监控/delayacct热路径NOP（mutex/rwsem/pcpu/schedule/iowait 默认不再出函数）。出问题可关'
         required: true
         type: boolean
         default: 'true'
@@ -434,6 +439,16 @@ jobs:
             git clone --depth=1 https://github.com/$GITHUB_REPOSITORY.git -b $GITHUB_REF_NAME $GITHUB_ACTOR
           fi
           bash ./$GITHUB_ACTOR/mainline_bp_patch/apply.sh "$(pwd)/common"
+
+      - name: 应用欧加锁监控热路径 NOP
+        if: inputs.oplus_src
+        run: |
+          echo "正在应用欧加源码热路径清理..."
+          cd kernel_workspace
+          if [[ ! -d ./$GITHUB_ACTOR ]]; then
+            git clone --depth=1 https://github.com/$GITHUB_REPOSITORY.git -b $GITHUB_REF_NAME $GITHUB_ACTOR
+          fi
+          bash ./$GITHUB_ACTOR/oplus_src_patch/apply.sh "$(pwd)/common"
 
       - name: 添加SUSFS 配置项
         if: inputs.susfs_enable
@@ -837,6 +852,7 @@ jobs:
           echo "F2FS LTS: ${{ github.event.inputs.f2fs_lts }}" >> ./ak3.log
           echo "ACK backport: ${{ github.event.inputs.ack_backport }}" >> ./ak3.log
           echo "Mainline BP: ${{ github.event.inputs.mainline_bp }}" >> ./ak3.log
+          echo "Oplus src: ${{ github.event.inputs.oplus_src }}" >> ./ak3.log
           zip -z ../$AK3_NAME < ./ak3.log
 
       - name: 上传 Ccache 调试日志
@@ -927,6 +943,7 @@ jobs:
           - f2fs discard/冻结/shrink：${{ github.event.inputs.f2fs_lts }}
           - ACK 关wifi停NAN/P2P：${{ github.event.inputs.ack_backport }}
           - 主线UFS busy-loop/f2fs死循环/PSI/MGLRU：${{ github.event.inputs.mainline_bp }}
+          - 欧加锁监控/delayacct热路径NOP：${{ github.event.inputs.oplus_src }}
           - ReSukiSU管理器下载：[ReSukiSU_CI](https://github.com/cctv18/ReSukiSU_CI/releases)
           - SukiSU Ultra管理器下载：[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases)
           - KernelSU Next管理器下载：[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next/releases)

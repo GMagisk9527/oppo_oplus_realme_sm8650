@@ -35,18 +35,20 @@ read -p "是否启用内核级基带保护？(y/n，默认：y): " APPLY_BBG
 APPLY_BBG=${APPLY_BBG:-y}
 read -p "是否启用 AOSP 功耗默认(RCU Lazy/TEO/WQ/MGLRU/关schedstats)？(y/n，默认：y): " APPLY_AOSP_POWER
 APPLY_AOSP_POWER=${APPLY_AOSP_POWER:-y}
-read -p \"是否合入 QCOM UFS/AH8/QUnipro/rpmh/AOSS 日用修复？(y/n，默认：y): \" APPLY_QCOM_LTS
+read -p "是否合入 QCOM UFS/AH8/QUnipro/rpmh/AOSS 日用修复？(y/n，默认：y): " APPLY_QCOM_LTS
 APPLY_QCOM_LTS=${APPLY_QCOM_LTS:-y}
 read -p "是否合入 futex/dma-buf/freezer/MGLRU 日用修复？(y/n，默认：y): " APPLY_ANDROID_LTS
 APPLY_ANDROID_LTS=${APPLY_ANDROID_LTS:-y}
 read -p "是否合入 AOSP PSI(memcg超限睡眠不算全局stall)？(y/n，默认：y): " APPLY_AOSP_PSI
 APPLY_AOSP_PSI=${APPLY_AOSP_PSI:-y}
-read -p \"是否合入 f2fs discard/冻结/shrink 日用修复？(y/n，默认：y): \" APPLY_F2FS_LTS
+read -p "是否合入 f2fs discard/冻结/shrink 日用修复？(y/n，默认：y): " APPLY_F2FS_LTS
 APPLY_F2FS_LTS=${APPLY_F2FS_LTS:-y}
 read -p "是否合入 ACK 关wifi停 NAN/P2P？(y/n，默认：y): " APPLY_ACK_BACKPORT
 APPLY_ACK_BACKPORT=${APPLY_ACK_BACKPORT:-y}
-read -p \"是否合入主线 UFS busy-loop / f2fs死循环 / PSI / MGLRU？(y/n，默认：y): \" APPLY_MAINLINE_BP
+read -p "是否合入主线 UFS busy-loop / f2fs死循环 / PSI / MGLRU？(y/n，默认：y): " APPLY_MAINLINE_BP
 APPLY_MAINLINE_BP=${APPLY_MAINLINE_BP:-y}
+read -p "是否合入欧加锁监控/delayacct 热路径 NOP？(y/n，默认：y): " APPLY_OPLUS_SRC
+APPLY_OPLUS_SRC=${APPLY_OPLUS_SRC:-y}
 
 if [[ "$KSU_BRANCH" == "y" || "$KSU_BRANCH" == "Y" ]]; then
   KSU_TYPE="SukiSU Ultra"
@@ -76,12 +78,13 @@ echo "启用三星SSG IO调度器: $APPLY_SSG"
 echo "启用Re-Kernel: $APPLY_REKERNEL"
 echo "启用内核级基带保护: $APPLY_BBG"
 echo "启用 AOSP 功耗默认: $APPLY_AOSP_POWER"
-echo \"合入 QCOM UFS/AH8/QUnipro/rpmh/AOSS: $APPLY_QCOM_LTS\"
+echo "合入 QCOM UFS/AH8/QUnipro/rpmh/AOSS: $APPLY_QCOM_LTS"
 echo "合入 futex/dma-buf/freezer/MGLRU: $APPLY_ANDROID_LTS"
 echo "合入 AOSP PSI memcg: $APPLY_AOSP_PSI"
-echo \"合入 f2fs discard/冻结/shrink: $APPLY_F2FS_LTS\"
+echo "合入 f2fs discard/冻结/shrink: $APPLY_F2FS_LTS"
 echo "合入 ACK 关wifi停NAN/P2P: $APPLY_ACK_BACKPORT"
-echo \"合入主线 UFS busy-loop/f2fs死循环/PSI/MGLRU: $APPLY_MAINLINE_BP\"
+echo "合入主线 UFS busy-loop/f2fs死循环/PSI/MGLRU: $APPLY_MAINLINE_BP"
+echo "合入欧加锁监控/delayacct热路径NOP: $APPLY_OPLUS_SRC"
 echo "===================="
 echo
 
@@ -218,7 +221,7 @@ else
 fi
 
 if [[ "$APPLY_QCOM_LTS" == [yY] ]]; then
-  echo \">>> 应用 QCOM UFS/AH8/QUnipro/rpmh/AOSS 日用修复...\"
+  echo ">>> 应用 QCOM UFS/AH8/QUnipro/rpmh/AOSS 日用修复..."
   bash "$SCRIPT_DIR/../qcom_lts_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
@@ -236,7 +239,7 @@ if [[ "$APPLY_AOSP_PSI" == [yY] ]]; then
 fi
 
 if [[ "$APPLY_F2FS_LTS" == [yY] ]]; then
-  echo \">>> 应用 f2fs discard/冻结/shrink 日用修复...\"
+  echo ">>> 应用 f2fs discard/冻结/shrink 日用修复..."
   bash "$SCRIPT_DIR/../f2fs_lts_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
@@ -248,8 +251,14 @@ if [[ "$APPLY_ACK_BACKPORT" == [yY] ]]; then
 fi
 
 if [[ "$APPLY_MAINLINE_BP" == [yY] ]]; then
-  echo \">>> 应用主线 UFS busy-loop / f2fs死循环 / PSI / MGLRU...\"
+  echo ">>> 应用主线 UFS busy-loop / f2fs死循环 / PSI / MGLRU..."
   bash "$SCRIPT_DIR/../mainline_bp_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
+  cd "$WORKDIR/kernel_workspace"
+fi
+
+if [[ "$APPLY_OPLUS_SRC" == [yY] ]]; then
+  echo ">>> 应用欧加锁监控/delayacct 热路径 NOP..."
+  bash "$SCRIPT_DIR/../oplus_src_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
 
@@ -524,6 +533,9 @@ if [[ "$APPLY_AOSP_PSI" == [yY] ]]; then
 fi
 if [[ "$APPLY_MAINLINE_BP" == [yY] ]]; then
   ZIP_NAME="${ZIP_NAME}-mlbp"
+fi
+if [[ "$APPLY_OPLUS_SRC" == [yY] ]]; then
+  ZIP_NAME="${ZIP_NAME}-oemsrc"
 fi
 
 ZIP_NAME="${ZIP_NAME}-v$(date +%Y%m%d).zip"

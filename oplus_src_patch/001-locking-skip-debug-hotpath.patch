@@ -1,0 +1,442 @@
+From: GMagisk9527 <GMagisk9527@users.noreply.github.com>
+Date: Sat, 25 Apr 2026 00:00:00 +0800
+Subject: [PATCH] locking: skip OnePlus krn_reliab debug on mutex/rwsem/pcpu hot paths
+
+[ Found in OnePlus 6.1.141 OKI source ]
+
+oplus_locking.o is obj-y. mutex_lock_handler / rwsem_lock_handler /
+rtmutex_* / pcp_* and locking_record_switch_in_cs are called from
+uncontended lock fast paths and every context switch. Debug is off
+by default, but the out-of-line call (and CFI) still happens.
+
+include/linux/percpu-rwsem.h is on the cgroup/fs hot path and still
+called android_vh_pcpu_rwsem_handler plus two _trace wrappers on
+every percpu_down_read/up_read. Gate those too.
+
+Gate those calls with a false jump label. Enabling
+/proc/krn_reliab/debug_enable still works. The exported
+locking_record_switch_in_cs and android_vh_pcpu_rwsem_handler stay
+for vendor modules.
+
+diff --git a/kernel/locking/krn_reliab.h b/kernel/locking/krn_reliab.h
+new file mode 100644
+index 0000000..1663216
+--- /dev/null
++++ b/kernel/locking/krn_reliab.h
+@@ -0,0 +1,90 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/*
++ * OnePlus krn_reliab lock debug is compiled into mutex/rwsem/rtmutex
++ * fast paths. Gate the out-of-line calls with a jump label so the
++ * default (debug off) case is a NOP.
++ */
++#ifndef _KRN_RELIAB_H_
++#define _KRN_RELIAB_H_
++
++#include <linux/jump_label.h>
++#include <linux/types.h>
++
++struct task_struct;
++struct mutex;
++struct rw_semaphore;
++struct rt_mutex_base;
++struct percpu_rw_semaphore;
++
++DECLARE_STATIC_KEY_FALSE(krn_reliab_key);
++
++void oplus_mutex_lock_handler(u64 lock, struct task_struct *tsk,
++			      unsigned long jiffies);
++void oplus_mutex_wait_handler(struct mutex *lock);
++void oplus_rwsem_lock_handler(u64 sem, struct task_struct *tsk,
++			      unsigned long jiffies);
++void oplus_rwsem_read_wait_handler(struct rw_semaphore *sem);
++void oplus_rtmutex_lock_handler(u64 lock, struct task_struct *tsk,
++				unsigned long jiffies);
++void oplus_rtmutex_wait_handler(struct rt_mutex_base *lock);
++void oplus_pcp_wait_handler(struct percpu_rw_semaphore *sem, bool is_reader,
++			    int phase);
++void oplus_pcpu_rwsem_handler(u64 sem, struct task_struct *tsk,
++			      unsigned long jiffies);
++
++static __always_inline void mutex_lock_handler(u64 lock, struct task_struct *tsk,
++					       unsigned long jiffies)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		oplus_mutex_lock_handler(lock, tsk, jiffies);
++}
++
++static __always_inline void mutex_wait_handler(struct mutex *lock)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		oplus_mutex_wait_handler(lock);
++}
++
++static __always_inline void rwsem_lock_handler(u64 sem, struct task_struct *tsk,
++					       unsigned long jiffies)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		oplus_rwsem_lock_handler(sem, tsk, jiffies);
++}
++
++static __always_inline void rwsem_read_wait_handler(struct rw_semaphore *sem)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		oplus_rwsem_read_wait_handler(sem);
++}
++
++static __always_inline void rtmutex_lock_handler(u64 lock, struct task_struct *tsk,
++						 unsigned long jiffies)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		oplus_rtmutex_lock_handler(lock, tsk, jiffies);
++}
++
++static __always_inline void rtmutex_wait_handler(struct rt_mutex_base *lock)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		oplus_rtmutex_wait_handler(lock);
++}
++
++static __always_inline void pcp_wait_handler(struct percpu_rw_semaphore *sem,
++					     bool is_reader, int phase)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		oplus_pcp_wait_handler(sem, is_reader, phase);
++}
++
++#ifndef OPLUS_LOCKING_IMPL
++static __always_inline void android_vh_pcpu_rwsem_handler(u64 sem,
++		struct task_struct *tsk, unsigned long jiffies)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		oplus_pcpu_rwsem_handler(sem, tsk, jiffies);
++}
++#endif
++
++#endif /* _KRN_RELIAB_H_ */
+diff --git a/include/linux/percpu-rwsem.h b/include/linux/percpu-rwsem.h
+index ff06454..0b6ecab 100644
+--- a/include/linux/percpu-rwsem.h
++++ b/include/linux/percpu-rwsem.h
+@@ -8,8 +8,7 @@
+ #include <linux/wait.h>
+ #include <linux/rcu_sync.h>
+ #include <linux/lockdep.h>
+-
+-extern void android_vh_pcpu_rwsem_handler(u64 sem, struct task_struct *tsk, unsigned long jiffies);
++#include "../../kernel/locking/krn_reliab.h"
+ 
+ void _trace_android_vh_record_pcpu_rwsem_starttime(
+ 		struct task_struct *tsk, unsigned long settime);
+@@ -59,7 +58,8 @@ static inline void percpu_down_read(struct percpu_rw_semaphore *sem)
+ 	rwsem_acquire_read(&sem->dep_map, 0, 0, _RET_IP_);
+ 
+ 	preempt_disable();
+-	_trace_android_vh_record_pcpu_rwsem_time_early(jiffies, sem);
++	if (static_branch_unlikely(&krn_reliab_key))
++		_trace_android_vh_record_pcpu_rwsem_time_early(jiffies, sem);
+ 
+ 	/*
+ 	 * We are in an RCU-sched read-side critical section, so the writer
+@@ -78,8 +78,10 @@ static inline void percpu_down_read(struct percpu_rw_semaphore *sem)
+ 	 * bleeding the critical section out.
+ 	 */
+ 	preempt_enable();
+-	_trace_android_vh_record_pcpu_rwsem_starttime(current, jiffies);
+-	android_vh_pcpu_rwsem_handler((u64)sem, current, jiffies);
++	if (static_branch_unlikely(&krn_reliab_key)) {
++		_trace_android_vh_record_pcpu_rwsem_starttime(current, jiffies);
++		android_vh_pcpu_rwsem_handler((u64)sem, current, jiffies);
++	}
+ }
+ 
+ static inline bool percpu_down_read_trylock(struct percpu_rw_semaphore *sem)
+@@ -101,9 +103,11 @@ static inline bool percpu_down_read_trylock(struct percpu_rw_semaphore *sem)
+ 	 */
+ 
+ 	if (ret) {
+-		_trace_android_vh_record_pcpu_rwsem_time_early(jiffies, sem);
+-		_trace_android_vh_record_pcpu_rwsem_starttime(current, jiffies);
+-		android_vh_pcpu_rwsem_handler((u64)sem, current, jiffies);
++		if (static_branch_unlikely(&krn_reliab_key)) {
++			_trace_android_vh_record_pcpu_rwsem_time_early(jiffies, sem);
++			_trace_android_vh_record_pcpu_rwsem_starttime(current, jiffies);
++			android_vh_pcpu_rwsem_handler((u64)sem, current, jiffies);
++		}
+ 		rwsem_acquire_read(&sem->dep_map, 0, 1, _RET_IP_);
+ 	}
+ 
+@@ -134,9 +138,11 @@ static inline void percpu_up_read(struct percpu_rw_semaphore *sem)
+ 		this_cpu_dec(*sem->read_count);
+ 		rcuwait_wake_up(&sem->writer);
+ 	}
+-	_trace_android_vh_record_pcpu_rwsem_time_early(0, sem);
+-	_trace_android_vh_record_pcpu_rwsem_starttime(current, 0);
+-	android_vh_pcpu_rwsem_handler((u64)sem, current, 0);
++	if (static_branch_unlikely(&krn_reliab_key)) {
++		_trace_android_vh_record_pcpu_rwsem_time_early(0, sem);
++		_trace_android_vh_record_pcpu_rwsem_starttime(current, 0);
++		android_vh_pcpu_rwsem_handler((u64)sem, current, 0);
++	}
+ 	preempt_enable();
+ }
+ 
+diff --git a/kernel/locking/locking_main.h b/kernel/locking/locking_main.h
+index 9c44dc3..8330eb8 100755
+--- a/kernel/locking/locking_main.h
++++ b/kernel/locking/locking_main.h
+@@ -151,5 +151,17 @@ static inline struct oplus_task_struct *get_oplus_task_struct(struct task_struct
+ 	return ots;
+ }
+ 
+-void locking_record_switch_in_cs(struct task_struct *tsk);
++#include <linux/jump_label.h>
++
++DECLARE_STATIC_KEY_FALSE(krn_reliab_key);
++
++void __locking_record_switch_in_cs(struct task_struct *tsk);
++
++#ifndef OPLUS_LOCKING_IMPL
++static __always_inline void locking_record_switch_in_cs(struct task_struct *tsk)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		__locking_record_switch_in_cs(tsk);
++}
++#endif
+ 
+diff --git a/kernel/locking/mutex.c b/kernel/locking/mutex.c
+index 696cc9c..994b6b5 100755
+--- a/kernel/locking/mutex.c
++++ b/kernel/locking/mutex.c
+@@ -35,6 +35,7 @@
+ 
+ #undef CREATE_TRACE_POINTS
+ #include <trace/hooks/dtask.h>
++#include "krn_reliab.h"
+ 
+ #ifndef CONFIG_PREEMPT_RT
+ #include "mutex.h"
+@@ -45,9 +46,6 @@
+ # define MUTEX_WARN_ON(cond)
+ #endif
+ 
+-extern void mutex_lock_handler(u64 lock, struct task_struct *tsk, unsigned long jiffies);
+-extern void mutex_wait_handler(struct mutex *lock);
+-
+ void
+ __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
+ {
+diff --git a/kernel/locking/oplus_locking.c b/kernel/locking/oplus_locking.c
+index 9de0dea..46aacad 100755
+--- a/kernel/locking/oplus_locking.c
++++ b/kernel/locking/oplus_locking.c
+@@ -1,4 +1,6 @@
++#define OPLUS_LOCKING_IMPL
+ #include <linux/module.h>
++#include <linux/jump_label.h>
+ #include <linux/init.h>
+ #include <linux/version.h>
+ #include <linux/sched/clock.h>
+@@ -30,6 +32,8 @@ static inline struct oplus_task_struct *get_oplus_task_struct(struct task_struct
+ #endif
+ 
+ static int debug_enable_flag;
++DEFINE_STATIC_KEY_FALSE(krn_reliab_key);
++EXPORT_SYMBOL(krn_reliab_key);
+ static bool init_done = false;
+ atomic64_t switch_in_cs_cnts;
+ 
+@@ -192,10 +196,12 @@ static void stats_cs_duration(int type, u64 duration)
+ 	}
+ }
+ 
+-void locking_record_switch_in_cs(struct task_struct *tsk)
++void __locking_record_switch_in_cs(struct task_struct *tsk)
+ {
+ 	struct oplus_task_struct *ots;
+ 
++	if (!debug_enable_flag)
++		return;
+ 	ots = get_oplus_task_struct(tsk);
+ 	if (NULL == ots)
+ 		return;
+@@ -203,6 +209,13 @@ void locking_record_switch_in_cs(struct task_struct *tsk)
+ 		atomic64_inc(&switch_in_cs_cnts);
+ 	}
+ }
++EXPORT_SYMBOL(__locking_record_switch_in_cs);
++
++void locking_record_switch_in_cs(struct task_struct *tsk)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		__locking_record_switch_in_cs(tsk);
++}
+ EXPORT_SYMBOL(locking_record_switch_in_cs);
+ 
+ static void get_lock_cnts(bool is_lock, int type)
+@@ -341,7 +354,7 @@ static void unlock_handler(struct task_struct *tsk, u64 lock_id, int type)
+ 	}
+ }
+ 
+-void mutex_lock_handler(u64 lock, struct task_struct *tsk, unsigned long jiffies)
++void oplus_mutex_lock_handler(u64 lock, struct task_struct *tsk, unsigned long jiffies)
+ {
+ 	if(!debug_enable_flag) return;
+ 
+@@ -356,7 +369,7 @@ void mutex_lock_handler(u64 lock, struct task_struct *tsk, unsigned long jiffies
+ 
+ }
+ 
+-void rwsem_lock_handler(u64 sem, struct task_struct *tsk, unsigned long jiffies)
++void oplus_rwsem_lock_handler(u64 sem, struct task_struct *tsk, unsigned long jiffies)
+ {
+ 	if(!debug_enable_flag) return;
+ 	get_lock_cnts(jiffies, RWSEM);
+@@ -369,7 +382,7 @@ void rwsem_lock_handler(u64 sem, struct task_struct *tsk, unsigned long jiffies)
+ 	}
+ }
+ 
+-void rtmutex_lock_handler(u64 lock, struct task_struct *tsk, unsigned long jiffies)
++void oplus_rtmutex_lock_handler(u64 lock, struct task_struct *tsk, unsigned long jiffies)
+ {
+ 	if(!debug_enable_flag) return;
+ 	get_lock_cnts(jiffies, RTMUTEX);
+@@ -380,7 +393,7 @@ void rtmutex_lock_handler(u64 lock, struct task_struct *tsk, unsigned long jiffi
+ 		unlock_handler(tsk, (u64)lock, RTMUTEX);
+ }
+ 
+-void android_vh_pcpu_rwsem_handler(u64 sem, struct task_struct *tsk, unsigned long jiffies)
++void oplus_pcpu_rwsem_handler(u64 sem, struct task_struct *tsk, unsigned long jiffies)
+ {
+ 	if(!debug_enable_flag) return;
+ 	get_lock_cnts(jiffies, PCP_RWSEM);
+@@ -392,6 +405,13 @@ void android_vh_pcpu_rwsem_handler(u64 sem, struct task_struct *tsk, unsigned lo
+ 		unlock_handler(tsk, (u64)sem, PCP_RWSEM);
+ */
+ }
++EXPORT_SYMBOL(oplus_pcpu_rwsem_handler);
++
++void android_vh_pcpu_rwsem_handler(u64 sem, struct task_struct *tsk, unsigned long jiffies)
++{
++	if (static_branch_unlikely(&krn_reliab_key))
++		oplus_pcpu_rwsem_handler(sem, tsk, jiffies);
++}
+ EXPORT_SYMBOL(android_vh_pcpu_rwsem_handler);
+ 
+ static int iter_rbtree_for_elem_nums(struct rb_root *root)
+@@ -471,7 +491,7 @@ static void record_waiters_cnts(void *lock, int type)
+ 	}
+ }
+ 
+-void mutex_wait_handler(struct mutex *lock)
++void oplus_mutex_wait_handler(struct mutex *lock)
+ {
+ 	if(!debug_enable_flag) return;
+ 	/* Contend stats. */
+@@ -481,7 +501,7 @@ void mutex_wait_handler(struct mutex *lock)
+ 	record_waiters_cnts(lock, MUTEX);
+ }
+ 
+-void rwsem_read_wait_handler(struct rw_semaphore *sem)
++void oplus_rwsem_read_wait_handler(struct rw_semaphore *sem)
+ {
+ 	if(!debug_enable_flag) return;
+ 	/* Contend stats. */
+@@ -496,6 +516,7 @@ void rwsem_read_wait_handler(struct rw_semaphore *sem)
+ 
+ void rwsem_write_wait_handler(struct rw_semaphore *sem)
+ {
++	if(!debug_enable_flag) return;
+ 	/* Contend stats. */
+ 	atomic64_inc(&wait_cnt[RWSEM]);
+ 
+@@ -503,7 +524,7 @@ void rwsem_write_wait_handler(struct rw_semaphore *sem)
+ 	record_waiters_cnts(sem, RWSEM);
+ }
+ 
+-void rtmutex_wait_handler(struct rt_mutex_base *lock)
++void oplus_rtmutex_wait_handler(struct rt_mutex_base *lock)
+ {
+ 	if(!debug_enable_flag) return;
+ 	/* Contend stats. */
+@@ -513,7 +534,7 @@ void rtmutex_wait_handler(struct rt_mutex_base *lock)
+ 	record_waiters_cnts(lock, RTMUTEX);
+ }
+ 
+-void pcp_wait_handler(struct percpu_rw_semaphore *sem, bool is_reader, int phase)
++void oplus_pcp_wait_handler(struct percpu_rw_semaphore *sem, bool is_reader, int phase)
+ {
+ 	if(!debug_enable_flag) return;
+ 	/* Contend stats. */
+@@ -824,12 +845,14 @@ static ssize_t kernel_reliab_enabled_write(struct file *file, const char __user
+ 		return err;
+ 
+ 	if(debug_enable_flag) {
++		static_branch_enable(&krn_reliab_key);
+ 		if(init_done)
+ 			return count;
+ 		init_done = true;
+ 		register_driver();
+ 		init_clear_lock_hold_timer();
+ 	} else {
++		static_branch_disable(&krn_reliab_key);
+ 		init_done = false;
+ 		unregister_driver();
+ 		exit_clear_lock_hold_timer();
+diff --git a/kernel/locking/percpu-rwsem.c b/kernel/locking/percpu-rwsem.c
+index 96806dd..76587d4 100755
+--- a/kernel/locking/percpu-rwsem.c
++++ b/kernel/locking/percpu-rwsem.c
+@@ -12,9 +12,7 @@
+ #include <trace/events/lock.h>
+ 
+ #include <trace/hooks/dtask.h>
+-
+-extern void android_vh_pcpu_rwsem_handler(u64 sem, struct task_struct *tsk, unsigned long jiffies);
+-extern void pcp_wait_handler(struct percpu_rw_semaphore *sem, bool is_reader, int phase);
++#include "krn_reliab.h"
+ /*
+  * trace_android_vh_record_pcpu_rwsem_starttime  is called in
+  * include/linux/percpu-rwsem.h by including include/hooks/dtask.h, which
+diff --git a/kernel/locking/rtmutex.c b/kernel/locking/rtmutex.c
+index f47728d..55671cc 100644
+--- a/kernel/locking/rtmutex.c
++++ b/kernel/locking/rtmutex.c
+@@ -33,7 +33,7 @@
+ # define build_ww_mutex()	(false)
+ # define ww_container_of(rtm)	NULL
+ 
+-extern void rtmutex_wait_handler(struct rt_mutex_base *lock);
++#include "krn_reliab.h"
+ 
+ static inline int __ww_mutex_add_waiter(struct rt_mutex_waiter *waiter,
+ 					struct rt_mutex *lock,
+diff --git a/kernel/locking/rtmutex_api.c b/kernel/locking/rtmutex_api.c
+index cd787fd..0867053 100644
+--- a/kernel/locking/rtmutex_api.c
++++ b/kernel/locking/rtmutex_api.c
+@@ -7,8 +7,7 @@
+ 
+ #define RT_MUTEX_BUILD_MUTEX
+ #include "rtmutex.c"
+-
+-extern void rtmutex_lock_handler(u64 lock, struct task_struct *tsk, unsigned long jiffies);
++#include "krn_reliab.h"
+ /*
+  * Max number of times we'll walk the boosting chain:
+  */
+diff --git a/kernel/locking/rwsem.c b/kernel/locking/rwsem.c
+index db84d21..d13ccd8 100644
+--- a/kernel/locking/rwsem.c
++++ b/kernel/locking/rwsem.c
+@@ -33,9 +33,7 @@
+ #include "lock_events.h"
+ #include <trace/hooks/dtask.h>
+ #include <trace/hooks/rwsem.h>
+-
+-extern void rwsem_lock_handler(u64 sem, struct task_struct *tsk, unsigned long jiffies);
+-extern void rwsem_read_wait_handler(struct rw_semaphore *sem);
++#include "krn_reliab.h"
+ /*
+  * The least significant 2 bits of the owner value has the following
+  * meanings when set.

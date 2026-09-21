@@ -1,0 +1,32 @@
+From: GMagisk9527 <GMagisk9527@users.noreply.github.com>
+Date: Sat, 25 Apr 2026 00:00:00 +0800
+Subject: [PATCH] scsi: ufs: ufs-qcom: do not enable test bus at init
+
+[ Found in OnePlus 6.1.141 OKI source ]
+
+ufs_qcom_init() always programs UNIPRO testbus 37 and sets
+TEST_BUS_EN / UFS_REG_TEST_BUS_EN. That muxes debug hardware and
+keeps extra clocks/logic alive. Dump paths can still call
+ufs_qcom_testbus_config() later.
+
+diff --git a/drivers/ufs/host/ufs-qcom.c b/drivers/ufs/host/ufs-qcom.c
+index 3b13449..cee0474 100644
+--- a/drivers/ufs/host/ufs-qcom.c
++++ b/drivers/ufs/host/ufs-qcom.c
+@@ -1034,12 +1034,11 @@ static int ufs_qcom_init(struct ufs_hba *hba)
+ 	if (hba->dev->id < MAX_UFS_QCOM_HOSTS)
+ 		ufs_qcom_hosts[hba->dev->id] = host;
+ 
++	/*
++	 * Test bus mux clocks debug hardware. Keep it off unless a
++	 * subsequent dump/sysfs path calls ufs_qcom_testbus_config().
++	 */
+ 	ufs_qcom_get_default_testbus_cfg(host);
+-	err = ufs_qcom_testbus_config(host);
+-	if (err)
+-		/* Failure is non-fatal */
+-		dev_warn(dev, "%s: failed to configure the testbus %d\n",
+-				__func__, err);
+ 
+ 	return 0;
+ 

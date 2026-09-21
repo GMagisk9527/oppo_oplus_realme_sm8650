@@ -11,5 +11,6 @@
 | 014 | AOSS cooling 按归一化状态比较，少发重复 QMP 投票 |
 | 016 | Auto-Hibern8 后开 `UFS_HW_CLK_CTRL_EN`，控制器进 H8 时自己拉低 clk_req，GCC 能关闲时钟 |
 | 017 | QUnipro 内部 CGC（DL/PA/DME），UTP 之外 Unipro 也能门控 |
+| 018 | 开机不再使能 UFS testbus mux（`TEST_BUS_EN`），少挂 debug 时钟；dump 仍可再开 |
 
 刷完重点：亮灭屏、充电、待机掉电。异常就把 Action 里 `qcom_lts` 关掉。
