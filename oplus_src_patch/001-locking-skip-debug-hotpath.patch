@@ -23,7 +23,7 @@ new file mode 100644
 index 0000000..1663216
 --- /dev/null
 +++ b/kernel/locking/krn_reliab.h
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,93 @@
 +/* SPDX-License-Identifier: GPL-2.0-only */
 +/*
 + * OnePlus krn_reliab lock debug is compiled into mutex/rwsem/rtmutex
@@ -104,7 +104,10 @@ index 0000000..1663216
 +		oplus_pcp_wait_handler(sem, is_reader, phase);
 +}
 +
-+#ifndef OPLUS_LOCKING_IMPL
++#ifdef OPLUS_LOCKING_IMPL
++void android_vh_pcpu_rwsem_handler(u64 sem, struct task_struct *tsk,
++				   unsigned long jiffies);
++#else
 +static __always_inline void android_vh_pcpu_rwsem_handler(u64 sem,
 +		struct task_struct *tsk, unsigned long jiffies)
 +{
