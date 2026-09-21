@@ -1,0 +1,95 @@
+From 6308d6d3f1b1 Mon Sep 17 00:00:00 2001
+From: David Carlier
+Date: Thu Aug 06 22:14:04 2026 +0000
+Subject: [PATCH] Bluetooth: hci_conn: fix potential UAF in create_big_sync
+
+UPSTREAM: Bluetooth: hci_conn: fix potential UAF in create_big_sync
+
+Add hci_conn_valid() to detect a stale connection before creating a BIG
+(LE Audio), handle -ECANCELED in create_big_complete(), re-validate
+under hci_dev_lock(), and take a reference on the hci_conn across the
+async boundary.
+
+Source: AOSP kernel/common android14-6.1 6308d6d3f1b1
+---
+diff --git a/include/net/bluetooth/hci_core.h b/include/net/bluetooth/hci_core.h
+index d2f7395..f572287 100644
+--- a/include/net/bluetooth/hci_core.h
++++ b/include/net/bluetooth/hci_core.h
+@@ -1073,6 +1073,24 @@ static inline unsigned int hci_conn_count(struct hci_dev *hdev)
+ 	return c->acl_num + c->amp_num + c->sco_num + c->le_num + c->iso_num;
+ }
+ 
++static inline bool hci_conn_valid(struct hci_dev *hdev, struct hci_conn *conn)
++{
++	struct hci_conn_hash *h = &hdev->conn_hash;
++	struct hci_conn  *c;
++
++	rcu_read_lock();
++
++	list_for_each_entry_rcu(c, &h->list, list) {
++		if (c == conn) {
++			rcu_read_unlock();
++			return true;
++		}
++	}
++	rcu_read_unlock();
++
++	return false;
++}
++
+ static inline __u8 hci_conn_lookup_type(struct hci_dev *hdev, __u16 handle)
+ {
+ 	struct hci_conn_hash *h = &hdev->conn_hash;
+diff --git a/net/bluetooth/hci_conn.c b/net/bluetooth/hci_conn.c
+index 8d659ae..707c06d 100644
+--- a/net/bluetooth/hci_conn.c
++++ b/net/bluetooth/hci_conn.c
+@@ -2060,6 +2060,9 @@ static int create_big_sync(struct hci_dev *hdev, void *data)
+ 	u32 flags = 0;
+ 	int err;
+ 
++	if (!hci_conn_valid(hdev, conn))
++		return -ECANCELED;
++
+ 	if (qos->out.phy == 0x02)
+ 		flags |= MGMT_ADV_FLAG_SEC_2M;
+ 
+@@ -2166,11 +2169,24 @@ static void create_big_complete(struct hci_dev *hdev, void *data, int err)
+ 
+ 	bt_dev_dbg(hdev, "conn %p", conn);
+ 
++	if (err == -ECANCELED)
++		goto done;
++
++	hci_dev_lock(hdev);
++
++	if (!hci_conn_valid(hdev, conn))
++		goto unlock;
++
+ 	if (err) {
+ 		bt_dev_err(hdev, "Unable to create BIG: %d", err);
+ 		hci_connect_cfm(conn, err);
+ 		hci_conn_del(conn);
+ 	}
++
++unlock:
++	hci_dev_unlock(hdev);
++done:
++	hci_conn_put(conn);
+ }
+ 
+ struct hci_conn *hci_connect_bis(struct hci_dev *hdev, bdaddr_t *dst,
+@@ -2195,10 +2211,11 @@ struct hci_conn *hci_connect_bis(struct hci_dev *hdev, bdaddr_t *dst,
+ 	}
+ 
+ 	/* Queue start periodic advertising and create BIG */
+-	err = hci_cmd_sync_queue(hdev, create_big_sync, conn,
++	err = hci_cmd_sync_queue(hdev, create_big_sync, hci_conn_get(conn),
+ 				 create_big_complete);
+ 	if (err < 0) {
+ 		hci_conn_drop(conn);
++		hci_conn_put(conn);
+ 		return ERR_PTR(err);
+ 	}
+ 

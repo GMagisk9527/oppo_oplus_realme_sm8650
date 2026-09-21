@@ -1,0 +1,50 @@
+From 459e3dddd95a+11d72085cd39 Mon Sep 17 00:00:00 2001
+From: ACK backport (hand-ported for OnePlus 6.1.141)
+Date: Wed Aug 26 00:00:00 2026 +0000
+Subject: [PATCH] PM: drop WQ_FREEZABLE from pm_wq and wait in suspend_late
+
+PM: drop WQ_FREEZABLE from pm_wq and wait for runtime PM in suspend_late
+
+Two upstream changes combined and hand-ported for the OnePlus 6.1.141
+tree, where the function is pm_start_workqueue() rather than
+pm_start_workqueues():
+
+- pm_wq is created with WQ_UNBOUND and without WQ_FREEZABLE, so runtime
+  PM work is not frozen mid-suspend.
+- __device_suspend_late() uses pm_runtime_disable() instead of
+  __pm_runtime_disable(dev, false), so suspend waits for in-flight
+  runtime PM operations instead of dropping them.
+
+Source: AOSP kernel/common android14-6.1 459e3dddd95a, 11d72085cd39
+---
+diff --git a/drivers/base/power/main.c b/drivers/base/power/main.c
+index 7716a2e..a46aefd 100644
+--- a/drivers/base/power/main.c
++++ b/drivers/base/power/main.c
+@@ -1382,7 +1382,12 @@ static int __device_suspend_late(struct device *dev, pm_message_t state, bool as
+ 	TRACE_DEVICE(dev);
+ 	TRACE_SUSPEND(0);
+ 
+-	__pm_runtime_disable(dev, false);
++	/*
++	 * After this point, any runtime PM operations targeting the device
++	 * will fail until the corresponding pm_runtime_enable() call in
++	 * device_resume_early().
++	 */
++	pm_runtime_disable(dev);
+ 
+ 	dpm_wait_for_subordinate(dev, async);
+ 
+diff --git a/kernel/power/main.c b/kernel/power/main.c
+index 31547d8..01c4cda 100644
+--- a/kernel/power/main.c
++++ b/kernel/power/main.c
+@@ -917,7 +917,7 @@ EXPORT_SYMBOL_GPL(pm_wq);
+ 
+ static int __init pm_start_workqueue(void)
+ {
+-	pm_wq = alloc_workqueue("pm", WQ_FREEZABLE, 0);
++	pm_wq = alloc_workqueue("pm", WQ_UNBOUND, 0);
+ 
+ 	return pm_wq ? 0 : -ENOMEM;
+ }

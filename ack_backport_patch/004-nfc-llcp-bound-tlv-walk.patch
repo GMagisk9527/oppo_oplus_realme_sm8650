@@ -1,0 +1,46 @@
+From 7792ca1167d9 Mon Sep 17 00:00:00 2001
+From: Doruk Tan Ozturk
+Date: Thu Jul 09 15:12:29 2026 +0200
+Subject: [PATCH] nfc: llcp: bound the connect_sn TLV walk to the skb
+
+UPSTREAM: nfc: llcp: bound the connect_sn TLV walk to the skb
+
+nfc_llcp_connect_sn() walks a TLV list without checking that the
+two-byte header or the declared length stay inside the skb, and hands
+back a service-name pointer that can point past the end of the buffer.
+Bound the walk to the skb tail.
+
+Source: AOSP kernel/common android14-6.1 7792ca1167d9
+---
+diff --git a/net/nfc/llcp_core.c b/net/nfc/llcp_core.c
+index 62b0f2d..aa8aa2b 100644
+--- a/net/nfc/llcp_core.c
++++ b/net/nfc/llcp_core.c
+@@ -847,13 +847,16 @@ static struct nfc_llcp_sock *nfc_llcp_sock_get_sn(struct nfc_llcp_local *local,
+ static const u8 *nfc_llcp_connect_sn(const struct sk_buff *skb, size_t *sn_len)
+ {
+ 	u8 type, length;
+-	const u8 *tlv = &skb->data[2];
+-	size_t tlv_array_len = skb->len - LLCP_HEADER_SIZE, offset = 0;
++	const u8 *tlv = &skb->data[LLCP_HEADER_SIZE];
++	const u8 *tlv_end = skb_tail_pointer(skb);
+ 
+-	while (offset < tlv_array_len) {
++	while (tlv + 2 < tlv_end) {
+ 		type = tlv[0];
+ 		length = tlv[1];
+ 
++		if (tlv + 2 + length > tlv_end)
++			break;
++
+ 		pr_debug("type 0x%x length %d\n", type, length);
+ 
+ 		if (type == LLCP_TLV_SN) {
+@@ -861,7 +864,6 @@ static const u8 *nfc_llcp_connect_sn(const struct sk_buff *skb, size_t *sn_len)
+ 			return &tlv[2];
+ 		}
+ 
+-		offset += length + 2;
+ 		tlv += length + 2;
+ 	}
+ 

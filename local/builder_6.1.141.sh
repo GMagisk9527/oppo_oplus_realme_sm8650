@@ -43,6 +43,8 @@ read -p "是否合入 AOSP PSI(memcg超限睡眠不算全局stall)？(y/n，默�
 APPLY_AOSP_PSI=${APPLY_AOSP_PSI:-y}
 read -p "是否合入 f2fs 原子写/write_end_io LTS 修复？(y/n，默认：y): " APPLY_F2FS_LTS
 APPLY_F2FS_LTS=${APPLY_F2FS_LTS:-y}
+read -p "是否合入 AOSP ACK 非LTS backport(wifi/xhci/NFC/蓝牙/PSI/PM)？(y/n，默认：y): " APPLY_ACK_BACKPORT
+APPLY_ACK_BACKPORT=${APPLY_ACK_BACKPORT:-y}
 
 if [[ "$KSU_BRANCH" == "y" || "$KSU_BRANCH" == "Y" ]]; then
   KSU_TYPE="SukiSU Ultra"
@@ -76,6 +78,7 @@ echo "合入 QCOM/UFS/idle LTS: $APPLY_QCOM_LTS"
 echo "合入 futex/binder/dma-buf LTS: $APPLY_ANDROID_LTS"
 echo "合入 AOSP PSI memcg: $APPLY_AOSP_PSI"
 echo "合入 f2fs LTS: $APPLY_F2FS_LTS"
+echo "合入 ACK 非LTS backport: $APPLY_ACK_BACKPORT"
 echo "===================="
 echo
 
@@ -232,6 +235,12 @@ fi
 if [[ "$APPLY_F2FS_LTS" == [yY] ]]; then
   echo ">>> 应用 f2fs 原子写/write_end_io LTS 修复..."
   bash "$SCRIPT_DIR/../f2fs_lts_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
+  cd "$WORKDIR/kernel_workspace"
+fi
+
+if [[ "$APPLY_ACK_BACKPORT" == [yY] ]]; then
+  echo ">>> 应用 AOSP ACK 非LTS backport..."
+  bash "$SCRIPT_DIR/../ack_backport_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
 

@@ -1,0 +1,32 @@
+From 2630d653c3ea Mon Sep 17 00:00:00 2001
+From: Miri Korenblit <miriam.rachel.korenblit@intel.com>
+Date: Wed Jan 07 14:04:51 2026 +0200
+Subject: [PATCH] wifi: cfg80211: stop NAN and P2P in cfg80211_leave
+
+UPSTREAM: wifi: cfg80211: stop NAN and P2P in cfg80211_leave
+
+__cfg80211_leave() assumed it was only called for netdev interfaces, but
+it also runs from suspend and from nl80211_netlink_notify. NL80211_ATTR_
+SOCKET_OWNER documents that NAN interfaces get destroyed in that case,
+so stop the P2P device and NAN as well.
+
+Relevant whenever wifi is toggled or the wifi driver unloads.
+
+Source: AOSP kernel/common android14-6.1 2630d653c3ea
+---
+diff --git a/net/wireless/core.c b/net/wireless/core.c
+index cef52e4..440c236 100644
+--- a/net/wireless/core.c
++++ b/net/wireless/core.c
+@@ -1329,8 +1329,10 @@ void __cfg80211_leave(struct cfg80211_registered_device *rdev,
+ 		__cfg80211_leave_ocb(rdev, dev);
+ 		break;
+ 	case NL80211_IFTYPE_P2P_DEVICE:
++		cfg80211_stop_p2p_device(rdev, wdev);
++		break;
+ 	case NL80211_IFTYPE_NAN:
+-		/* cannot happen, has no netdev */
++		cfg80211_stop_nan(rdev, wdev);
+ 		break;
+ 	case NL80211_IFTYPE_AP_VLAN:
+ 	case NL80211_IFTYPE_MONITOR:

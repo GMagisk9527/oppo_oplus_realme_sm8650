@@ -1,0 +1,81 @@
+From e61258f4a5a2 Mon Sep 17 00:00:00 2001
+From: Mathias Nyman <mathias.nyman@linux.intel.com>
+Date: Fri Dec 01 17:06:47 2023 +0200
+Subject: [PATCH] xhci: fix possible null pointer deref during xhci urb enqueue
+
+UPSTREAM: xhci: fix possible null pointer deref during xhci urb enqueue
+
+There is a gap between an urb being submitted and being linked into the
+endpoint queue. If the device is disconnected in that window, usb core
+does not know about the pending urb yet and the device can be freed
+before xhci_urb_enqueue() dereferences it. Device teardown takes the
+xhci spinlock, so hold it across the device checks and the enqueue, and
+route the early error paths through free_priv.
+
+Source: AOSP kernel/common android14-6.1 e61258f4a5a2
+---
+diff --git a/drivers/usb/host/xhci.c b/drivers/usb/host/xhci.c
+index b62111c..d1feed3 100644
+--- a/drivers/usb/host/xhci.c
++++ b/drivers/usb/host/xhci.c
+@@ -1701,24 +1701,7 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
+ 	struct urb_priv	*urb_priv;
+ 	int num_tds;
+ 
+-	if (!urb)
+-		return -EINVAL;
+-	ret = xhci_check_args(hcd, urb->dev, urb->ep,
+-					true, true, __func__);
+-	if (ret <= 0)
+-		return ret ? ret : -EINVAL;
+-
+-	slot_id = urb->dev->slot_id;
+ 	ep_index = xhci_get_endpoint_index(&urb->ep->desc);
+-	ep_state = &xhci->devs[slot_id]->eps[ep_index].ep_state;
+-
+-	if (!HCD_HW_ACCESSIBLE(hcd))
+-		return -ESHUTDOWN;
+-
+-	if (xhci->devs[slot_id]->flags & VDEV_PORT_ERROR) {
+-		xhci_dbg(xhci, "Can't queue urb, port error, link inactive\n");
+-		return -ENODEV;
+-	}
+ 
+ 	if (xhci_vendor_usb_offload_skip_urb(xhci, urb)) {
+ 		xhci_dbg(xhci, "skip urb for usb offload\n");
+@@ -1747,12 +1730,35 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
+ 
+ 	spin_lock_irqsave(&xhci->lock, flags);
+ 
++	ret = xhci_check_args(hcd, urb->dev, urb->ep,
++			      true, true, __func__);
++	if (ret <= 0) {
++		ret = ret ? ret : -EINVAL;
++		goto free_priv;
++	}
++
++	slot_id = urb->dev->slot_id;
++
++	if (!HCD_HW_ACCESSIBLE(hcd)) {
++		ret = -ESHUTDOWN;
++		goto free_priv;
++	}
++
++	if (xhci->devs[slot_id]->flags & VDEV_PORT_ERROR) {
++		xhci_dbg(xhci, "Can't queue urb, port error, link inactive\n");
++		ret = -ENODEV;
++		goto free_priv;
++	}
++
+ 	if (xhci->xhc_state & XHCI_STATE_DYING) {
+ 		xhci_dbg(xhci, "Ep 0x%x: URB %p submitted for non-responsive xHCI host.\n",
+ 			 urb->ep->desc.bEndpointAddress, urb);
+ 		ret = -ESHUTDOWN;
+ 		goto free_priv;
+ 	}
++
++	ep_state = &xhci->devs[slot_id]->eps[ep_index].ep_state;
++
+ 	if (*ep_state & (EP_GETTING_STREAMS | EP_GETTING_NO_STREAMS)) {
+ 		xhci_warn(xhci, "WARN: Can't enqueue URB, ep in streams transition state %x\n",
+ 			  *ep_state);
