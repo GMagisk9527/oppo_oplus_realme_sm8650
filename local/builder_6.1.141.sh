@@ -45,6 +45,8 @@ read -p "是否合入 f2fs 原子写/write_end_io LTS 修复？(y/n，默认：y
 APPLY_F2FS_LTS=${APPLY_F2FS_LTS:-y}
 read -p "是否合入 AOSP ACK 非LTS backport(wifi/xhci/NFC/蓝牙/PSI/PM)？(y/n，默认：y): " APPLY_ACK_BACKPORT
 APPLY_ACK_BACKPORT=${APPLY_ACK_BACKPORT:-y}
+read -p "是否合入主线6.6-6.18独立修复(UFS/PHY/f2fs/gadget)？(y/n，默认：y): " APPLY_MAINLINE_BP
+APPLY_MAINLINE_BP=${APPLY_MAINLINE_BP:-y}
 
 if [[ "$KSU_BRANCH" == "y" || "$KSU_BRANCH" == "Y" ]]; then
   KSU_TYPE="SukiSU Ultra"
@@ -79,6 +81,7 @@ echo "合入 futex/binder/dma-buf LTS: $APPLY_ANDROID_LTS"
 echo "合入 AOSP PSI memcg: $APPLY_AOSP_PSI"
 echo "合入 f2fs LTS: $APPLY_F2FS_LTS"
 echo "合入 ACK 非LTS backport: $APPLY_ACK_BACKPORT"
+echo "合入主线 6.6-6.18 backport: $APPLY_MAINLINE_BP"
 echo "===================="
 echo
 
@@ -241,6 +244,12 @@ fi
 if [[ "$APPLY_ACK_BACKPORT" == [yY] ]]; then
   echo ">>> 应用 AOSP ACK 非LTS backport..."
   bash "$SCRIPT_DIR/../ack_backport_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
+  cd "$WORKDIR/kernel_workspace"
+fi
+
+if [[ "$APPLY_MAINLINE_BP" == [yY] ]]; then
+  echo ">>> 应用主线 6.6-6.18 独立 backport..."
+  bash "$SCRIPT_DIR/../mainline_bp_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
 
@@ -512,6 +521,9 @@ if [[ "$APPLY_ANDROID_LTS" == [yY] ]]; then
 fi
 if [[ "$APPLY_AOSP_PSI" == [yY] ]]; then
   ZIP_NAME="${ZIP_NAME}-aospsi"
+fi
+if [[ "$APPLY_MAINLINE_BP" == [yY] ]]; then
+  ZIP_NAME="${ZIP_NAME}-mlbp"
 fi
 
 ZIP_NAME="${ZIP_NAME}-v$(date +%Y%m%d).zip"

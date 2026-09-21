@@ -1,0 +1,58 @@
+From 5cb33b00c8fbb6e8f1fa3d281c3036d5f7c7c41f Mon Sep 17 00:00:00 2001
+From: Wenjie Qi <qwjhust@gmail.com>
+Date: Tue, 4 Aug 2026 09:48:48 +0800
+Subject: [PATCH] f2fs: avoid NULL checkpoint thread access in sysfs
+
+[ Upstream commit 5cb33b00c8fbb6e8f1fa3d281c3036d5f7c7c41f ]
+
+checkpoint_merge can be enabled even when no checkpoint merge thread is
+running. A read-only mount is one case: f2fs does not start
+f2fs_issue_ckpt there, but ckpt_thread_ioprio is still writable through
+sysfs.
+
+The ckpt_thread_ioprio store path updates the saved ioprio value and,
+when checkpoint_merge is enabled, calls set_task_ioprio() for the
+checkpoint thread. If cprc->f2fs_issue_ckpt is NULL, that dereferences a
+NULL task pointer.
+
+Protect ckpt_thread_ioprio sysfs writes with s_umount as well, so the
+checkpoint thread cannot disappear under the store path while updating
+its ioprio.
+
+[ Context matches OnePlus 6.1.141 OKI sysfs store. ]
+
+Fixes: e65920661708 ("f2fs: add ckpt_thread_ioprio sysfs node")
+Signed-off-by: Wenjie Qi <qiwenjie@xiaomi.com>
+---
+ fs/f2fs/sysfs.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/fs/f2fs/sysfs.c b/fs/f2fs/sysfs.c
+--- a/fs/f2fs/sysfs.c
++++ b/fs/f2fs/sysfs.c
+@@ -588,7 +588,7 @@ static ssize_t __sbi_store(struct f2fs_attr *a,
+ 			return -EINVAL;
+ 
+ 		cprc->ckpt_thread_ioprio = IOPRIO_PRIO_VALUE(class, data);
+-		if (test_opt(sbi, MERGE_CHECKPOINT)) {
++		if (cprc->f2fs_issue_ckpt) {
+ 			ret = set_task_ioprio(cprc->f2fs_issue_ckpt,
+ 					cprc->ckpt_thread_ioprio);
+ 			if (ret)
+@@ -929,13 +929,14 @@ static ssize_t f2fs_sbi_store(struct f2fs_attr *a,
+ 	ssize_t ret;
+ 	bool gc_entry = (!strcmp(a->attr.name, "gc_urgent") ||
+ 					a->struct_type == GC_THREAD);
++	bool thread_entry = !strcmp(a->attr.name, "ckpt_thread_ioprio");
+ 
+-	if (gc_entry) {
++	if (gc_entry || thread_entry) {
+ 		if (!down_read_trylock(&sbi->sb->s_umount))
+ 			return -EAGAIN;
+ 	}
+ 	ret = __sbi_store(a, sbi, buf, count);
+-	if (gc_entry)
++	if (gc_entry || thread_entry)
+ 		up_read(&sbi->sb->s_umount);
+ 
+ 	return ret;

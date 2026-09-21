@@ -110,6 +110,11 @@ on:
         required: true
         type: boolean
         default: 'true'
+      mainline_bp:
+        description: '合入主线6.6–6.18独立修复(UFS busy-loop/QMP PHY/f2fs漏计数/压缩死循环/gadget)。出问题可关'
+        required: true
+        type: boolean
+        default: 'true'
       ccache_update:
         description: '更新ccache缓存(将本次编译生成的ccache缓存覆盖至仓库缓存，在更改编译配置、源码或需要刷新缓存时开启)'
         required: true
@@ -419,6 +424,16 @@ jobs:
             git clone --depth=1 https://github.com/$GITHUB_REPOSITORY.git -b $GITHUB_REF_NAME $GITHUB_ACTOR
           fi
           bash ./$GITHUB_ACTOR/ack_backport_patch/apply.sh "$(pwd)/common"
+
+      - name: 应用主线 6.6-6.18 独立 backport
+        if: inputs.mainline_bp
+        run: |
+          echo "正在应用主线 6.6-6.18 backport 补丁..."
+          cd kernel_workspace
+          if [[ ! -d ./$GITHUB_ACTOR ]]; then
+            git clone --depth=1 https://github.com/$GITHUB_REPOSITORY.git -b $GITHUB_REF_NAME $GITHUB_ACTOR
+          fi
+          bash ./$GITHUB_ACTOR/mainline_bp_patch/apply.sh "$(pwd)/common"
 
       - name: 添加SUSFS 配置项
         if: inputs.susfs_enable
@@ -819,6 +834,7 @@ jobs:
           echo "QCOM LTS: ${{ github.event.inputs.qcom_lts }}" >> ./ak3.log
           echo "Android LTS: ${{ github.event.inputs.android_lts }}" >> ./ak3.log
           echo "AOSP PSI: ${{ github.event.inputs.aosp_psi }}" >> ./ak3.log
+          echo "Mainline BP: ${{ github.event.inputs.mainline_bp }}" >> ./ak3.log
           zip -z ../$AK3_NAME < ./ak3.log
 
       - name: 上传 Ccache 调试日志
@@ -906,6 +922,7 @@ jobs:
           - QCOM/UFS/idle LTS修复：${{ github.event.inputs.qcom_lts }}
           - futex/binder/freezer/RCU/MGLRU LTS修复：${{ github.event.inputs.android_lts }}
           - AOSP PSI(memcg超限不计全局stall)：${{ github.event.inputs.aosp_psi }}
+          - 主线6.6-6.18独立backport(UFS/PHY/f2fs/gadget)：${{ github.event.inputs.mainline_bp }}
           - ReSukiSU管理器下载：[ReSukiSU_CI](https://github.com/cctv18/ReSukiSU_CI/releases)
           - SukiSU Ultra管理器下载：[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases)
           - KernelSU Next管理器下载：[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next/releases)

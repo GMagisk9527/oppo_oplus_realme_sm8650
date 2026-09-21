@@ -1,0 +1,33 @@
+From 720d8b2f2457f4962ca353dd90395e2660d9a10d Mon Sep 17 00:00:00 2001
+From: Bart Van Assche <bvanassche@acm.org>
+Date: Fri, 7 Aug 2026 15:49:46 -0700
+Subject: [PATCH] scsi: ufs: core: Set task state before io_schedule_timeout()
+
+[ Upstream commit 720d8b2f2457f4962ca353dd90395e2660d9a10d ]
+
+Set the task state to TASK_UNINTERRUPTIBLE before calling
+io_schedule_timeout() in ufshcd_wait_for_doorbell_clr().  Without
+setting the task state, io_schedule_timeout() returns immediately
+because the task state remains TASK_RUNNING. This results in a busy loop
+that wastes CPU cycles.
+
+[ Adapted for OnePlus 6.1.141 OKI: function is still named
+  ufshcd_wait_for_doorbell_clr(), same loop. ]
+
+Fixes: 2000bc309703 ("scsi: ufs: core: Reduce the clock scaling latency")
+Signed-off-by: Bart Van Assche <bvanassche@acm.org>
+---
+ drivers/ufs/core/ufshcd.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/ufs/core/ufshcd.c b/drivers/ufs/core/ufshcd.c
+--- a/drivers/ufs/core/ufshcd.c
++++ b/drivers/ufs/core/ufshcd.c
+@@ -1261,6 +1261,7 @@ static int ufshcd_wait_for_doorbell_clr(struct ufs_hba *hba,
+ 		}
+ 
+ 		spin_unlock_irqrestore(hba->host->host_lock, flags);
++		__set_current_state(TASK_UNINTERRUPTIBLE);
+ 		io_schedule_timeout(msecs_to_jiffies(20));
+ 		if (ktime_to_us(ktime_sub(ktime_get(), start)) >
+ 		    wait_timeout_us) {

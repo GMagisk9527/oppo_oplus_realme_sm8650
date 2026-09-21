@@ -1,0 +1,48 @@
+From 142c5593379273264474f31d5956b1a0065cd576 Mon Sep 17 00:00:00 2001
+From: Loic Poulain <loic.poulain@oss.qualcomm.com>
+Date: Wed, 22 Jul 2026 15:45:19 +0200
+Subject: [PATCH] phy: qcom: qmp-usb: Fix possible NULL-deref on early runtime suspend
+
+[ Upstream commit 142c5593379273264474f31d5956b1a0065cd576 ]
+
+There is a small window where the runtime suspend callback may run
+after pm_runtime_enable() and before pm_runtime_forbid(). In this
+case, a crash occurs because runtime suspend/resume dereferences
+qphy->phy pointer, which is not yet initialized:
+
+        `if (!qphy->phy->init_count) {`
+
+This can also happen if user re-enables runtime-pm via the sysfs
+attribute before qmp phy is initialized.
+
+[ Adapted for OnePlus 6.1.141 OKI: this tree still uses the legacy
+  qcom_qmp / qmp_phy split, not the later qmp_usb struct. Guard
+  qphy->phy itself plus init_count. ]
+
+Fixes: e464a3180a43 ("phy: qcom-qmp-usb: split off the legacy USB+dp_com support")
+Signed-off-by: Loic Poulain <loic.poulain@oss.qualcomm.com>
+---
+ drivers/phy/qualcomm/phy-qcom-qmp-usb.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/phy/qualcomm/phy-qcom-qmp-usb.c b/drivers/phy/qualcomm/phy-qcom-qmp-usb.c
+--- a/drivers/phy/qualcomm/phy-qcom-qmp-usb.c
++++ b/drivers/phy/qualcomm/phy-qcom-qmp-usb.c
+@@ -2261,7 +2261,7 @@ static int __maybe_unused qmp_usb_runtime_suspend(struct device *dev)
+ 
+ 	dev_vdbg(dev, "Suspending QMP phy, mode:%d\n", qphy->mode);
+ 
+-	if (!qphy->phy->init_count) {
++	if (!qphy->phy || !qphy->phy->init_count) {
+ 		dev_vdbg(dev, "PHY not initialized, bailing out\n");
+ 		return 0;
+ 	}
+@@ -2283,7 +2283,7 @@ static int __maybe_unused qmp_usb_runtime_resume(struct device *dev)
+ 
+ 	dev_vdbg(dev, "Resuming QMP phy, mode:%d\n", qphy->mode);
+ 
+-	if (!qphy->phy->init_count) {
++	if (!qphy->phy || !qphy->phy->init_count) {
+ 		dev_vdbg(dev, "PHY not initialized, bailing out\n");
+ 		return 0;
+ 	}
