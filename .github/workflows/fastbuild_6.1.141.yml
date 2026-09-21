@@ -66,10 +66,10 @@ on:
         type: boolean
         default: 'false'
       ssg_enable:
-        description: '是否启用三星SSG IO调度器支持(提升IO读写性能; 在一加12上可能导致bug)'
+        description: '三星SSG IO调度器。一加12开了会不开机，6.1.141默认关；其他机型需要再勾'
         required: true
         type: boolean
-        default: 'true'
+        default: 'false'
       rekernel_enable:
         description: '是否启用Re-Kernel支持(与Freezer/NoActive等软件配合, 提升应用冻结能力)'
         required: true
