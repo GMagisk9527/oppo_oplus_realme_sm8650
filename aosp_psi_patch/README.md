@@ -1,6 +1,6 @@
 # AOSP PSI：memcg 超限睡眠不算全局 stall
 
-来源 AOSP `android14-6.1-lts` `e7abc85f1ccc`。
+来源 AOSP `android14-6.1-lts` `e7abc85f1ccc`。开关 `aosp_psi`，默认开。
 
 `memory.high` 超限后内核会 `schedule_timeout_killable()` 限速分配。这段延迟以前记进全局 PSI，容易被当成整机内存吃紧（冻结、调度、省电策略会跟着误判）。
 

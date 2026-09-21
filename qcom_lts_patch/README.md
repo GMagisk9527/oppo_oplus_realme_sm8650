@@ -1,19 +1,13 @@
-# QCOM / LTS 修复（6.1.141 → 6.1.188，已在一加 12 OKI 上试合）
+# QCOM / LTS（默认只留日用能感到的）
 
-来源是 linux-stable，不是 6.12 主线，也不是整棵 CLO。
-只留在 `oneplus/sm8650_b_16.0.0_oneplus12_6.1.141` 上能干净 apply 的独立修复。
+来源 linux-stable `v6.1.141..v6.1.188`，已在一加 12 OKI 上试合。
+开关 `qcom_lts`，默认开。空指针 / 探测期泄漏在 `dropped/`，apply.sh 不会合进去。
 
-| 类别 | 补丁 | 作用 |
-|---|---|---|
-| UFS | 002,004,006,007,008,010,013 | hibern8 退出失败做 link recovery、异常处理、字符串描述符、UIC completion |
-| rpmh / cmd-db / smem / aoss | 003,005,011,012,014 | idle 投票、共享内存泄漏、AOSS 散热状态比较 |
-| USB PHY | 001,015 | QMP / SNPS femto 空指针 |
-| cpuidle | 009 | 只有一个 idle 状态时跳过 governor |
+| 补丁 | 日用收益 |
+|---|---|
+| 002 | hibern8 退出失败改 link recovery，避免 runtime resume 和 error handler 互卡（亮灭屏 UFS 卡住） |
+| 003 | rpmh TCS 完成后清 TRIGGER，避免假 completion IRQ 把深睡眠打醒 |
+| 008 | W-LUN resume 失败后 error handler 能把 parent 拉起来，存储不会一直 RPM 错误 |
+| 014 | AOSS cooling 按归一化状态比较，少发重复 QMP 投票 |
 
-没合进去的（试过，一加改过 `ufshcd.c` 对不上，或平台用不上）：
-
-- UFS error handler hang / lrbp->cmd / UAF / 把 recovery 挪到 wl_resume
-- ocmem、LLCC v1、qcom-spm（老 SPM idle）
-- WALT / GPU / Wi‑Fi 模块（不在这棵 Image 里）
-
-刷完重点看：开机、UFS 亮灭屏、充电、USB。异常就把 Action 里 `qcom_lts` 关掉重编。
+刷完重点：亮灭屏、充电、待机掉电。异常就把 Action 里 `qcom_lts` 关掉。

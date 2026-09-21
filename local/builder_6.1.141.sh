@@ -35,17 +35,17 @@ read -p "是否启用内核级基带保护？(y/n，默认：y): " APPLY_BBG
 APPLY_BBG=${APPLY_BBG:-y}
 read -p "是否启用 AOSP 功耗默认(RCU Lazy/TEO/WQ/MGLRU/关schedstats)？(y/n，默认：y): " APPLY_AOSP_POWER
 APPLY_AOSP_POWER=${APPLY_AOSP_POWER:-y}
-read -p "是否合入 QCOM/UFS/idle LTS 修复？(y/n，默认：y): " APPLY_QCOM_LTS
+read -p "是否合入 QCOM UFS/rpmh/AOSS 日用修复？(y/n，默认：y): " APPLY_QCOM_LTS
 APPLY_QCOM_LTS=${APPLY_QCOM_LTS:-y}
-read -p "是否合入 futex/binder/dma-buf LTS 修复？(y/n，默认：y): " APPLY_ANDROID_LTS
+read -p "是否合入 futex/dma-buf/freezer/MGLRU 日用修复？(y/n，默认：y): " APPLY_ANDROID_LTS
 APPLY_ANDROID_LTS=${APPLY_ANDROID_LTS:-y}
 read -p "是否合入 AOSP PSI(memcg超限睡眠不算全局stall)？(y/n，默认：y): " APPLY_AOSP_PSI
 APPLY_AOSP_PSI=${APPLY_AOSP_PSI:-y}
-read -p "是否合入 f2fs 原子写/write_end_io LTS 修复？(y/n，默认：y): " APPLY_F2FS_LTS
+read -p "是否合入 f2fs discard 记账修复？(y/n，默认：y): " APPLY_F2FS_LTS
 APPLY_F2FS_LTS=${APPLY_F2FS_LTS:-y}
-read -p "是否合入 AOSP ACK 非LTS backport(wifi/NFC/蓝牙/PSI，不含xhci/PM)？(y/n，默认：y): " APPLY_ACK_BACKPORT
+read -p "是否合入 ACK 关wifi停 NAN/P2P？(y/n，默认：y): " APPLY_ACK_BACKPORT
 APPLY_ACK_BACKPORT=${APPLY_ACK_BACKPORT:-y}
-read -p "是否合入主线6.6-6.18独立修复(UFS/PHY/f2fs/gadget)？(y/n，默认：y): " APPLY_MAINLINE_BP
+read -p "是否合入主线 UFS busy-loop / f2fs 压缩死循环？(y/n，默认：y): " APPLY_MAINLINE_BP
 APPLY_MAINLINE_BP=${APPLY_MAINLINE_BP:-y}
 
 if [[ "$KSU_BRANCH" == "y" || "$KSU_BRANCH" == "Y" ]]; then
@@ -76,12 +76,12 @@ echo "启用三星SSG IO调度器: $APPLY_SSG"
 echo "启用Re-Kernel: $APPLY_REKERNEL"
 echo "启用内核级基带保护: $APPLY_BBG"
 echo "启用 AOSP 功耗默认: $APPLY_AOSP_POWER"
-echo "合入 QCOM/UFS/idle LTS: $APPLY_QCOM_LTS"
-echo "合入 futex/binder/dma-buf LTS: $APPLY_ANDROID_LTS"
+echo "合入 QCOM UFS/rpmh/AOSS: $APPLY_QCOM_LTS"
+echo "合入 futex/dma-buf/freezer/MGLRU: $APPLY_ANDROID_LTS"
 echo "合入 AOSP PSI memcg: $APPLY_AOSP_PSI"
-echo "合入 f2fs LTS: $APPLY_F2FS_LTS"
-echo "合入 ACK 非LTS backport: $APPLY_ACK_BACKPORT"
-echo "合入主线 6.6-6.18 backport: $APPLY_MAINLINE_BP"
+echo "合入 f2fs discard 记账: $APPLY_F2FS_LTS"
+echo "合入 ACK 关wifi停NAN/P2P: $APPLY_ACK_BACKPORT"
+echo "合入主线 UFS busy-loop/压缩死循环: $APPLY_MAINLINE_BP"
 echo "===================="
 echo
 
@@ -218,13 +218,13 @@ else
 fi
 
 if [[ "$APPLY_QCOM_LTS" == [yY] ]]; then
-  echo ">>> 应用 QCOM/UFS/idle LTS 修复..."
+  echo ">>> 应用 QCOM UFS/rpmh/AOSS 日用修复..."
   bash "$SCRIPT_DIR/../qcom_lts_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
 
 if [[ "$APPLY_ANDROID_LTS" == [yY] ]]; then
-  echo ">>> 应用 futex/binder/dma-buf LTS 修复..."
+  echo ">>> 应用 futex/dma-buf/freezer/MGLRU 日用修复..."
   bash "$SCRIPT_DIR/../android_lts_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
@@ -236,19 +236,19 @@ if [[ "$APPLY_AOSP_PSI" == [yY] ]]; then
 fi
 
 if [[ "$APPLY_F2FS_LTS" == [yY] ]]; then
-  echo ">>> 应用 f2fs 原子写/write_end_io LTS 修复..."
+  echo ">>> 应用 f2fs discard 记账修复..."
   bash "$SCRIPT_DIR/../f2fs_lts_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
 
 if [[ "$APPLY_ACK_BACKPORT" == [yY] ]]; then
-  echo ">>> 应用 AOSP ACK 非LTS backport..."
+  echo ">>> 应用 ACK 关wifi停 NAN/P2P..."
   bash "$SCRIPT_DIR/../ack_backport_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi
 
 if [[ "$APPLY_MAINLINE_BP" == [yY] ]]; then
-  echo ">>> 应用主线 6.6-6.18 独立 backport..."
+  echo ">>> 应用主线 UFS busy-loop / f2fs 压缩死循环..."
   bash "$SCRIPT_DIR/../mainline_bp_patch/apply.sh" "$WORKDIR/kernel_workspace/common"
   cd "$WORKDIR/kernel_workspace"
 fi

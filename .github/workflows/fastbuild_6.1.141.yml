@@ -86,12 +86,12 @@ on:
         type: boolean
         default: 'true'
       qcom_lts:
-        description: '合入6.1.141之后的QCOM/UFS/idle LTS修复(已在一加12 OKI上试合)。出问题可关'
+        description: '合入UFS hibern8/EH、rpmh假唤醒、AOSS散热投票(日用)。出问题可关'
         required: true
         type: boolean
         default: 'true'
       android_lts:
-        description: '合入6.1.141之后的futex/binder/freezer/RCU/MGLRU修复。出问题可关'
+        description: '合入dma-buf超时、futex卡死、alarmtimer、freezer、MGLRU扫描(日用)。出问题可关'
         required: true
         type: boolean
         default: 'true'
@@ -101,17 +101,17 @@ on:
         type: boolean
         default: 'true'
       f2fs_lts:
-        description: '合入f2fs原子写/write_end_io UAF及inline fiemap修复。出问题可关'
+        description: '合入f2fs checkpoint discard记账(discard_blks不归零)。出问题可关'
         required: true
         type: boolean
         default: 'true'
       ack_backport:
-        description: '合入AOSP ACK android14-6.1(非LTS) backport(wifi/NFC/蓝牙/PSI)。xhci/PM已从默认包拿掉(开机回归)。出问题可关'
+        description: '关wifi时停NAN/P2P。出问题可关'
         required: true
         type: boolean
         default: 'true'
       mainline_bp:
-        description: '合入主线6.6–6.18独立修复(UFS busy-loop/QMP PHY/f2fs漏计数/压缩死循环/gadget)。出问题可关'
+        description: '合入UFS doorbell空转、f2fs压缩EIO死循环。出问题可关'
         required: true
         type: boolean
         default: 'true'
@@ -375,7 +375,7 @@ jobs:
           cp ../SukiSU_patch/other/zram/zram_patch/${{ env.KERNEL_VERSION }}/lz4kd.patch ./
           patch -p1 -F 3 < lz4kd.patch || true
 
-      - name: 应用 QCOM/UFS/idle LTS 修复
+      - name: 应用 QCOM UFS/rpmh/AOSS 日用修复
         if: inputs.qcom_lts
         run: |
           echo "正在应用 QCOM/LTS 修复补丁..."
@@ -385,7 +385,7 @@ jobs:
           fi
           bash ./$GITHUB_ACTOR/qcom_lts_patch/apply.sh "$(pwd)/common"
 
-      - name: 应用 futex/binder/dma-buf LTS 修复
+      - name: 应用 futex/dma-buf/freezer/MGLRU 日用修复
         if: inputs.android_lts
         run: |
           echo "正在应用 Android LTS 修复补丁..."
@@ -405,7 +405,7 @@ jobs:
           fi
           bash ./$GITHUB_ACTOR/aosp_psi_patch/apply.sh "$(pwd)/common"
 
-      - name: 应用 f2fs 原子写/write_end_io LTS 修复
+      - name: 应用 f2fs discard 记账修复
         if: inputs.f2fs_lts
         run: |
           echo "正在应用 f2fs LTS 修复补丁..."
@@ -415,7 +415,7 @@ jobs:
           fi
           bash ./$GITHUB_ACTOR/f2fs_lts_patch/apply.sh "$(pwd)/common"
 
-      - name: 应用 ACK 非LTS backport (wifi/NFC/蓝牙/PSI)
+      - name: 应用 ACK wifi 关 NAN/P2P
         if: inputs.ack_backport
         run: |
           echo "正在应用 ACK backport 补丁..."
@@ -425,7 +425,7 @@ jobs:
           fi
           bash ./$GITHUB_ACTOR/ack_backport_patch/apply.sh "$(pwd)/common"
 
-      - name: 应用主线 6.6-6.18 独立 backport
+      - name: 应用主线 UFS busy-loop / f2fs 压缩死循环
         if: inputs.mainline_bp
         run: |
           echo "正在应用主线 6.6-6.18 backport 补丁..."
@@ -834,6 +834,8 @@ jobs:
           echo "QCOM LTS: ${{ github.event.inputs.qcom_lts }}" >> ./ak3.log
           echo "Android LTS: ${{ github.event.inputs.android_lts }}" >> ./ak3.log
           echo "AOSP PSI: ${{ github.event.inputs.aosp_psi }}" >> ./ak3.log
+          echo "F2FS LTS: ${{ github.event.inputs.f2fs_lts }}" >> ./ak3.log
+          echo "ACK backport: ${{ github.event.inputs.ack_backport }}" >> ./ak3.log
           echo "Mainline BP: ${{ github.event.inputs.mainline_bp }}" >> ./ak3.log
           zip -z ../$AK3_NAME < ./ak3.log
 
@@ -919,10 +921,12 @@ jobs:
           - Re-Kernel支持：${{ github.event.inputs.rekernel_enable }}
           - 内核级基带保护支持：${{ github.event.inputs.baseband_guard }}
           - AOSP功耗默认(RCU Lazy/TEO/WQ/MGLRU/schedstats)：${{ github.event.inputs.aosp_power }}
-          - QCOM/UFS/idle LTS修复：${{ github.event.inputs.qcom_lts }}
-          - futex/binder/freezer/RCU/MGLRU LTS修复：${{ github.event.inputs.android_lts }}
+          - QCOM UFS/rpmh/AOSS 日用修复：${{ github.event.inputs.qcom_lts }}
+          - futex/dma-buf/freezer/MGLRU 日用修复：${{ github.event.inputs.android_lts }}
           - AOSP PSI(memcg超限不计全局stall)：${{ github.event.inputs.aosp_psi }}
-          - 主线6.6-6.18独立backport(UFS/PHY/f2fs/gadget)：${{ github.event.inputs.mainline_bp }}
+          - f2fs discard 记账：${{ github.event.inputs.f2fs_lts }}
+          - ACK 关wifi停NAN/P2P：${{ github.event.inputs.ack_backport }}
+          - 主线UFS busy-loop/f2fs压缩死循环：${{ github.event.inputs.mainline_bp }}
           - ReSukiSU管理器下载：[ReSukiSU_CI](https://github.com/cctv18/ReSukiSU_CI/releases)
           - SukiSU Ultra管理器下载：[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases)
           - KernelSU Next管理器下载：[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next/releases)
